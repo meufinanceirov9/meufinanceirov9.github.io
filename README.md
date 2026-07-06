@@ -1,27 +1,16 @@
-# Financeiro CRM v12.07 — atualização confiável e layout polido
+# Financeiro CRM v12.09 — patrimônio completo corrigido
 
-Melhorias desta versão:
+Correção desta versão:
 
-- Adicionado `service-worker.js` real para o PWA atualizar melhor no GitHub Pages.
-- Adicionado `version.json` para o app detectar novas versões.
-- Adicionado `manifest.webmanifest` real com start_url `./?v=1207`.
-- Ícones com cache-bust `?v=1207` para evitar o quadrado vazio no topo e no iPhone.
-- Botão **Carregar atualização** agora limpa cache do app antes de recarregar.
-- Pequenos polimentos de layout, contraste, chips de versão e modo.
-- Mantém o fluxo público: abre direto no Dashboard; conta fica no Perfil.
+- Removida a confusão de um botão separado para Caixinha Futuro.
+- A aba **Registrar** agora mostra o formulário de **Patrimônio completo** diretamente.
+- O campo **Caixinha Futuro / objetivo** aparece no começo do formulário de patrimônio.
+- Ao salvar patrimônio, Futuro, Giro, Carteira, Banco, cartão e rendimentos são salvos juntos como base do dia.
+- O histórico de patrimônio agora mostra a coluna **Futuro** para confirmar que o valor entrou.
+- Mantém o fluxo público: app abre direto no Dashboard e conta fica no Perfil.
 
-## Publicar no GitHub Pages
+Para atualizar no GitHub Pages, envie todos os arquivos da pasta extraída diretamente na raiz do repositório `meufinanceirov9.github.io` e faça commit.
 
-Envie **todos os arquivos da pasta extraída** diretamente na raiz do repositório `meufinanceirov9.github.io` e faça commit.
+Teste após publicar com:
 
-Depois teste por:
-
-```text
-https://meufinanceirov9.github.io/?v=1207
-```
-
-Quando o cache atualizar, o link normal também deve abrir certo:
-
-```text
-https://meufinanceirov9.github.io/
-```
+https://meufinanceirov9.github.io/?v=1209
