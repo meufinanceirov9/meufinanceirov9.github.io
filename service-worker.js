@@ -1,17 +1,28 @@
-const CACHE_NAME = 'financeiro-crm-v12-10';
+const CACHE_NAME = 'financeiro-crm-v13-00-local-estavel';
+const ASSETS = [
+  './',
+  './index.html?v=1300',
+  './styles.css?v=1300',
+  './core.js?v=1300',
+  './app.js?v=1300',
+  './manifest.webmanifest',
+  './version.json',
+  './favicon.png',
+  './icon-180.png',
+  './icon-192.png',
+  './icon-512.png'
+];
 self.addEventListener('install', event => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(['./?v=1210','./index.html?v=1210','./manifest.webmanifest?v=1210','./icon-180.png?v=1210','./icon-192.png?v=1210','./icon-512.png?v=1210','./favicon.png?v=1210','./version.json?v=1210']).catch(()=>null)));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))).then(()=>self.clients.claim()));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(()=>self.clients.claim()));
 });
-self.addEventListener('message', event => { if(event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting(); });
 self.addEventListener('fetch', event => {
-  const req = event.request;
-  if(req.mode === 'navigate' || req.url.includes('index.html') || req.url.includes('version.json')){
-    event.respondWith(fetch(req, {cache:'no-store'}).catch(()=>caches.match('./?v=1210').then(r=>r||caches.match('./index.html?v=1210'))));
-    return;
-  }
-  event.respondWith(caches.match(req).then(cached => cached || fetch(req).then(res => { const copy=res.clone(); caches.open(CACHE_NAME).then(cache=>cache.put(req,copy)); return res; }).catch(()=>cached)));
+  if(event.request.method !== 'GET') return;
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(()=>{});
+    return response;
+  }).catch(() => caches.match('./index.html?v=1300'))));
 });

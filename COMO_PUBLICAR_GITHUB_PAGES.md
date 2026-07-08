@@ -1,38 +1,9 @@
-# Como publicar o Financeiro CRM no GitHub Pages
+# Como publicar no GitHub Pages
 
-## 1. Criar repositório
-1. Entre em github.com.
-2. Clique em **+ > New repository**.
-3. Nome sugerido: `financeiro-crm`.
-4. Marque **Public**.
-5. Clique em **Create repository**.
+1. Extraia este ZIP.
+2. Envie todos os arquivos para o repositório.
+3. No GitHub, vá em Settings > Pages.
+4. Escolha a branch principal e a pasta raiz.
+5. Aguarde o GitHub gerar o link.
 
-## 2. Enviar arquivos
-1. No repositório, clique em **uploading an existing file** ou **Add file > Upload files**.
-2. Envie todos os arquivos desta pasta para a raiz do repositório.
-3. Confirme em **Commit changes**.
-
-Arquivos principais:
-- `index.html`
-- `manifest.webmanifest`
-- `favicon.png`
-- pasta `icons/`
-- `.nojekyll`
-
-## 3. Ativar GitHub Pages
-1. Vá em **Settings** do repositório.
-2. No menu esquerdo, clique em **Pages**.
-3. Em **Build and deployment**, escolha **Deploy from a branch**.
-4. Em **Branch**, escolha `main` e a pasta `/ (root)`.
-5. Clique em **Save**.
-
-## 4. Link do app
-Depois de alguns minutos, o GitHub vai mostrar o link do site, geralmente assim:
-
-`https://SEU-USUARIO.github.io/financeiro-crm/`
-
-## 5. Instalar no iPhone
-Abra o link no Safari e use:
-
-**Compartilhar > Adicionar à Tela de Início**
-
+Depois de publicar, abra o app e confira se no Perfil aparece `v13.00`.

@@ -1,3 +1,5 @@
-# Google Login pausado
+# Login Google / Supabase
 
-Por enquanto o app deve usar e-mail e senha para evitar o pré-pagamento/configuração do Google Cloud.
+Na v13.00, login e nuvem foram desativados de propósito.
+
+A sincronização em nuvem deve ser tratada apenas em uma versão futura, como v13.10, depois da base local estar testada e estável.

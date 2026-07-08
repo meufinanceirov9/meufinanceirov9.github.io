@@ -1,20 +1,39 @@
-# Financeiro CRM v12.10 — objetivo editável no Dashboard
+# Financeiro CRM v13.00
 
-Melhoria desta versão:
+**Build:** `2026-07-08-v13-00-reconstrucao-local-estavel`
 
-- O valor do objetivo principal agora fica editável direto no **Dashboard**.
-- O prazo/data final do objetivo também fica editável direto no **Dashboard**.
-- Para editar, clique no valor da meta ou na data do prazo, altere o campo e pressione **Enter** ou toque fora.
-- Ao mudar o valor ou a data, o app recalcula automaticamente:
-  - falta para a meta;
-  - porcentagem concluída;
-  - ritmo necessário por mês;
-  - barra de progresso.
-- A alteração é salva no objetivo principal e mantém compatibilidade com os campos antigos `goal` e `goalDue`.
-- Mantém as correções da v12.09: patrimônio completo com Caixinha Futuro, Giro, Carteira, Banco, cartão e rendimentos.
+Esta versão é uma reconstrução técnica local estável feita a partir da linha v12.x, com o objetivo de parar os remendos e organizar o app como um sistema financeiro pessoal mais seguro.
 
-Para atualizar no GitHub Pages, envie todos os arquivos da pasta extraída diretamente na raiz do repositório `meufinanceirov9.github.io` e faça commit.
+## O que mudou
 
-Teste após publicar com:
+- Código separado em camadas:
+  - `core.js`: regras financeiras, cálculos, migração e validação.
+  - `app.js`: interface, formulários, eventos e localStorage.
+  - `styles.css`: visual.
+- Login/Supabase removidos da execução da v13.00.
+- O app abre em modo local, sem tentar usar chave inválida.
+- Dashboard mantém meta e prazo editáveis.
+- Alterar meta ou prazo recalcula falta, progresso, barra e ritmo mensal.
+- Patrimônio completo virou base real de cálculo.
+- Movimentos depois da base atualizam saldos vivos.
+- Rendimento fica separado de faturamento.
+- iFood em dinheiro possui regra explícita: carteira sobe pelo recebido e Giro desce pelo troco.
+- Backup JSON e importação de backup mantidos como prioridade.
+- Histórico com edição e exclusão.
 
-https://meufinanceirov9.github.io/?v=1210
+## Arquivos importantes
+
+- `index.html`
+- `core.js`
+- `app.js`
+- `styles.css`
+- `DOCUMENTO_MESTRE_FINANCEIRO_CRM.md`
+- `TESTES_v13.md`
+- `tests/core.test.js`
+- `manifest.webmanifest`
+- `service-worker.js`
+- `version.json`
+
+## Próxima etapa recomendada
+
+Usar a v13.00 por alguns testes locais. Só depois pensar em `v13.10` com Supabase/sincronização.
