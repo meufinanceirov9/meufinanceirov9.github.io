@@ -1,10 +1,10 @@
-const CACHE_NAME = 'financeiro-crm-v13-00-local-estavel';
+const CACHE_NAME = 'financeiro-crm-v13-01-mascara-valores';
 const ASSETS = [
   './',
-  './index.html?v=1300',
-  './styles.css?v=1300',
-  './core.js?v=1300',
-  './app.js?v=1300',
+  './index.html?v=1301',
+  './styles.css?v=1301',
+  './core.js?v=1301',
+  './app.js?v=1301',
   './manifest.webmanifest',
   './version.json',
   './favicon.png',
@@ -24,5 +24,5 @@ self.addEventListener('fetch', event => {
     const copy = response.clone();
     caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(()=>{});
     return response;
-  }).catch(() => caches.match('./index.html?v=1300'))));
+  }).catch(() => caches.match('./index.html?v=1301'))));
 });

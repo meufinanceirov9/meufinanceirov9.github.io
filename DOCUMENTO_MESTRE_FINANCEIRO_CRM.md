@@ -1,10 +1,10 @@
-# Documento Mestre — Financeiro CRM v13.00
+# Documento Mestre — Financeiro CRM v13.01
 
 ## Versão-base
 
-- Versão: **v13.00**
-- Build: **2026-07-08-v13-00-reconstrucao-local-estavel**
-- Estratégia: reconstrução técnica local estável.
+- Versão: **v13.01**
+- Build: **2026-07-08-v13-01-mascara-valores-padronizada**
+- Estratégia: reconstrução técnica local estável, preservando o visual v13 como padrão do app.
 - Nuvem/login: **bloqueados nesta versão**. O app funciona sem Supabase e sem chave externa.
 - Dados reais: versão iniciada como app zerado, conforme autorização do usuário.
 
@@ -27,6 +27,9 @@ Controlar o patrimônio pessoal, a evolução até uma meta financeira e os movi
 8. Um registro de patrimônio completo vira a nova base real de cálculo.
 9. Movimentos criados depois da última base são aplicados para estimar o saldo vivo atual.
 10. A meta principal possui valor e data editáveis. Alterar qualquer um recalcula falta, progresso e ritmo mensal necessário.
+
+11. O frontend/visual da v13 é o padrão oficial do app e deve ser preservado nas próximas versões, salvo pedido explícito de redesign.
+12. Todos os campos monetários devem usar a mesma máscara visual de centavos subindo ao digitar. Ex.: `1` → `0,01`, `123` → `1,23`, `123456` → `1.234,56`.
 
 ## Estrutura dos dados
 
@@ -120,14 +123,15 @@ Campos principais:
 ## Política de versões
 
 - v13.00: reconstrução local estável.
-- v13.01, v13.02 etc.: correções pequenas.
+- v13.01: máscara de valores monetários padronizada, preservando visual v13.
+- v13.02 etc.: correções pequenas.
 - v13.10: futura sincronização em nuvem, se a base local estiver estável.
 - v14.00: apenas para mudança grande de produto/arquitetura.
 
 ## Checklist mínimo antes de entregar uma versão
 
 - O app abre sem erro de JavaScript.
-- O app não tenta fazer login nem conectar Supabase na v13.00.
+- O app não tenta fazer login nem conectar Supabase na linha v13 local.
 - É possível registrar patrimônio completo.
 - É possível registrar entrada.
 - É possível registrar saída.
@@ -137,7 +141,8 @@ Campos principais:
 - É possível registrar compra no cartão.
 - É possível registrar pagamento do cartão.
 - O Dashboard recalcula patrimônio e meta.
-- Meta de `100000`, `100000,00` ou `100.000,00` vira R$ 100.000,00.
+- Parser interno aceita `100000`, `100000,00` ou `100.000,00` como R$ 100.000,00.
+- Máscara visual monetária é igual em todos os campos: `123456` vira `1.234,56`.
 - Alterar prazo da meta muda o ritmo mensal necessário.
 - Histórico lista registros.
 - Histórico permite editar e excluir.

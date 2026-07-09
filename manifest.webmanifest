@@ -2,7 +2,7 @@
   "name": "Financeiro CRM",
   "short_name": "Financeiro",
   "description": "Controle financeiro pessoal local com patrimônio, objetivo, rendimentos e backup.",
-  "start_url": "./index.html?v=1300",
+  "start_url": "./index.html?v=1301",
   "scope": "./",
   "display": "standalone",
   "background_color": "#eef2ff",

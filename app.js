@@ -264,7 +264,7 @@
 
   function renderPerfil(){
     const lastBackup = state.settings.lastBackupAt ? new Date(state.settings.lastBackupAt).toLocaleString('pt-BR') : 'Nunca';
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na v13.00, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section><section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
+    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section><section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
   }
 
   function openModal(html){
@@ -277,7 +277,7 @@
 
   function editGoalTarget(){
     const current = C.currencyInput(state.settings.goal.target) || '100.000,00';
-    openModal(`<div class="card-title"><div><h2>Editar valor da meta</h2><p>Você pode digitar 100000, 100000,00 ou 100.000,00.</p></div></div><form class="form" data-form="goal-target"><label>Valor do objetivo<input class="money-field" name="target" inputmode="decimal" value="${escapeHtml(current)}" autofocus></label><button class="primary-btn" type="submit">Salvar</button></form>`);
+    openModal(`<div class="card-title"><div><h2>Editar valor da meta</h2><p>Todos os campos de valor usam máscara igual: os centavos sobem enquanto você digita. Para R$ 100.000,00, digite 10000000 ou cole 100.000,00.</p></div></div><form class="form" data-form="goal-target"><label>Valor do objetivo<input class="money-field" name="target" inputmode="decimal" value="${escapeHtml(current)}" autofocus></label><button class="primary-btn" type="submit">Salvar</button></form>`);
     setTimeout(()=> $('[name="target"]', $('#modal'))?.focus(), 60);
   }
   function editGoalDue(){
@@ -425,6 +425,32 @@
     if(action === 'exportCSV') exportCSV();
     if(action === 'resetApp') resetApp();
   });
+  function applyMoneyMask(input){
+    if(!input) return;
+    input.value = C.currencyInputFromCentsDigits(input.value);
+    try{ input.setSelectionRange(input.value.length, input.value.length); }catch(_){ }
+  }
+  function normalizeMoneyField(input){
+    if(!input) return;
+    input.value = C.normalizeCurrencyInputDisplay(input.value);
+  }
+
+  document.addEventListener('focusin', (ev)=>{
+    const input = ev.target.closest('input.money-field');
+    if(!input) return;
+    setTimeout(()=>{ try{ input.select(); }catch(_){ } }, 0);
+  });
+  document.addEventListener('input', (ev)=>{
+    const input = ev.target.closest('input.money-field');
+    if(!input) return;
+    applyMoneyMask(input);
+  });
+  document.addEventListener('focusout', (ev)=>{
+    const input = ev.target.closest('input.money-field');
+    if(!input) return;
+    normalizeMoneyField(input);
+  });
+
   document.addEventListener('submit', (ev)=>{
     const form = ev.target.closest('form[data-form]');
     if(!form) return;

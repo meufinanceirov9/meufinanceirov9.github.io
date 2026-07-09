@@ -1,8 +1,8 @@
 (function(global){
   'use strict';
 
-  const APP_VERSION = 'v13.00';
-  const BUILD_ID = '2026-07-08-v13-00-reconstrucao-local-estavel';
+  const APP_VERSION = 'v13.01';
+  const BUILD_ID = '2026-07-08-v13-01-mascara-valores-padronizada';
   const STORAGE_KEY = 'financeiro-crm-v13-local';
   const BACKUP_PREFIX = 'backup-financeiro-crm';
 
@@ -117,6 +117,16 @@
   function currencyInput(value){
     const n = round2(value);
     return n === 0 ? '' : n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function currencyInputFromCentsDigits(input){
+    const digits = String(input ?? '').replace(/\D/g,'');
+    if(!digits) return '';
+    const value = Number(digits) / 100;
+    return round2(value).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function normalizeCurrencyInputDisplay(input){
+    const value = parseCurrencyBR(input);
+    return value === 0 ? '' : currencyInput(value);
   }
 
   function defaultState(){
@@ -430,7 +440,7 @@
     ACCOUNT_LABELS, ASSET_ACCOUNTS, LIABILITY_ACCOUNTS,
     nowISO, todayISO, startOfMonthISO, id, safeNumber, round2, clamp,
     isValidDate, parseISODate, formatDateBR, daysBetween, monthsBetween,
-    parseCurrencyBR, formatCurrencyBR, currencyInput,
+    parseCurrencyBR, formatCurrencyBR, currencyInput, currencyInputFromCentsDigits, normalizeCurrencyInputDisplay,
     defaultState, migrateState, normalizeGoal, normalizeSnapshot, normalizeMovement,
     sortByDateThenCreated, sortDesc, snapshotAssets, getLatestSnapshot, calculateBalances,
     movementImpact, calculateGoal, getMonthlySummary, explainSnapshotDifference, validateState,
