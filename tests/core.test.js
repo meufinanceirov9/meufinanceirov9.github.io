@@ -98,7 +98,7 @@ assert.strictEqual(C.validateState(invalidTransfer).ok, false, 'transferência c
 
 const backupV13 = {data:{settings:{goal:{target:100000,due:'2027-12-31'}}, patrimonio:[{data:'2026-07-08',futuro:'14.362,91',giro:'529,47',carteira:'4,00',faturaAberta:'901,36'}], movements:[]}};
 const migratedBackup = C.migrateState(backupV13);
-assert.strictEqual(migratedBackup.settings.appVersion, 'v13.04');
+assert.strictEqual(migratedBackup.settings.appVersion, 'v13.05');
 assert.strictEqual(migratedBackup.settings.goal.due, '2027-12-31');
 approx(C.calculateBalances(migratedBackup,{asOfDate:'2026-07-09'}).liquido, 13995.02, 'backup v13 antigo deve migrar preservando liquido');
 
@@ -116,5 +116,19 @@ approx(delta.delta, 7.80, 'auditoria deve calcular variação entre bases');
 approx(delta.unexplained, 7.80, 'variação sem movimento deve ser sinalizada');
 assert.strictEqual(delta.accountDeltas.length, 2, 'auditoria deve listar contas que variaram');
 
-console.log('Todos os testes do core v13.04 passaram.');
+
+const yieldEstimateState = C.defaultState();
+yieldEstimateState.patrimonio.push(C.normalizeSnapshot({id:'y1',data:'2026-07-08',createdAt:'2026-07-08T10:00:00.000Z', futuro:14362.91, giro:529.47, carteira:29, faturaAberta:901.36}));
+yieldEstimateState.movements.push(C.normalizeMovement({id:'ym1', type:'entrada', data:'2026-07-09', createdAt:'2026-07-09T12:00:00.000Z', account:'giro', value:45, description:'Entregas'}));
+const draftWithIncome = C.normalizeSnapshot({id:'y2',data:'2026-07-09',createdAt:'2026-07-09T18:00:00.000Z', futuro:14370.45, giro:574.73, carteira:29, faturaAberta:901.36});
+const estimatedWithIncome = C.estimateSnapshotYields(yieldEstimateState, draftWithIncome, {excludeId:'y2', currentCreatedAt:draftWithIncome.createdAt});
+approx(estimatedWithIncome.suggested.futuro, 7.54, 'rendimento Futuro deve ser calculado por diferença');
+approx(estimatedWithIncome.suggested.giro, 0.26, 'entrada de 45 no Giro deve ser descontada antes de estimar CDI');
+approx(estimatedWithIncome.suggested.total, 7.80, 'rendimento total sugerido deve ignorar entrada lançada');
+assert.strictEqual(estimatedWithIncome.movements.length, 1, 'estimativa deve considerar movimento entre bases');
+
+const estimatedNoPrevious = C.estimateSnapshotYields(C.defaultState(), draftWithIncome);
+assert.strictEqual(estimatedNoPrevious.ok, false, 'sem base anterior não deve estimar rendimento');
+
+console.log('Todos os testes do core v13.05 passaram.');
 

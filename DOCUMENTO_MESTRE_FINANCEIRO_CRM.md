@@ -163,3 +163,25 @@ Campos principais:
 - A auditoria entre bases deve identificar variações de patrimônio que não foram explicadas por movimentos.
 - Diferenças positivas sem movimentos podem indicar rendimento CDI ou ajuste de base; o app não deve classificar automaticamente como faturamento.
 - Rendimentos preenchidos nos campos da base diária devem entrar no resumo de rendimentos do mês.
+
+## Atualização v13.05 — rendimento automático assistido
+
+Objetivo: o usuário não deve precisar calcular manualmente o rendimento diário das Caixinhas do Nubank comparando saldo anterior e saldo atual.
+
+Regra implementada:
+
+1. Ao registrar uma nova base de patrimônio, o app compara os saldos atuais com a base anterior.
+2. Movimentos lançados entre as bases são descontados da diferença.
+3. A sobra positiva em Caixinha Futuro e Caixinha Giro é sugerida como rendimento provável/CDI.
+4. Entradas reais, como entregas lançadas na Caixinha Giro, não devem ser tratadas como rendimento.
+5. Rendimento sugerido pode ser aplicado nos campos `rendimentoFuturo` e `rendimentoGiro` da base.
+6. O Dashboard mostra o rendimento provável na auditoria entre as últimas bases.
+7. Uma nova base para uma data já existente atualiza a base daquele dia em vez de criar duplicidade.
+8. Ferramentas técnicas de cache ficam ocultas no modo usuário e aparecem apenas em modo desenvolvedor.
+
+Exemplo de referência:
+
+- Base anterior: Futuro R$ 14.362,91 e Giro R$ 529,47.
+- Nova base: Futuro R$ 14.370,45 e Giro R$ 574,73.
+- Movimento lançado entre bases: entrada de R$ 45,00 no Giro.
+- Rendimento sugerido: Futuro R$ 7,54; Giro R$ 0,26; total R$ 7,80.

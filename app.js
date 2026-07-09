@@ -64,7 +64,7 @@
   }
   function accountTitle(key){ return C.ACCOUNT_LABELS[key] || key; }
   function setRuntimeIcon(){
-    const href = `favicon-v13-04.png?v=1304-${encodeURIComponent(C.BUILD_ID)}`;
+    const href = `favicon-v13-05.png?v=1305-${encodeURIComponent(C.BUILD_ID)}`;
     let link = document.querySelector('link[data-runtime-favicon]') || document.querySelector('link[rel="icon"]');
     if(!link){ link = document.createElement('link'); document.head.appendChild(link); }
     link.setAttribute('rel','icon');
@@ -87,7 +87,7 @@
       }
     }catch(err){ console.warn('Falha ao limpar cache automaticamente.', err); }
     const cleanPath = window.location.pathname || '/';
-    window.location.replace(`${cleanPath}?v=1304-${Date.now()}`);
+    window.location.replace(`${cleanPath}?v=1305-${Date.now()}`);
   }
 
   function render(){
@@ -133,7 +133,7 @@
       dashboard:'Patrimônio, objetivo, progresso e ritmo necessário.',
       registrar:'Cadastre patrimônio completo, entradas, saídas, cartão, rendimento e iFood em dinheiro.',
       historico:'Todos os registros locais, com edição e exclusão.',
-      rendimentos:'Acompanhe CDI manual separado por Caixinha Futuro e Caixinha Giro.',
+      rendimentos:'Acompanhe o CDI separado por Caixinha Futuro e Caixinha Giro, com ajuda automática pela diferença diária.',
       perfil:'Modo local, backup, importação e configurações.'
     })[currentView] || '';
   }
@@ -190,9 +190,11 @@
   function renderBalanceAudit(balances){
     const details = C.snapshotDeltaDetails(state);
     if(!details) return '';
+    const suggested = details.suggestedYield || {futuro:0,giro:0,total:0};
+    const hasSuggestedYield = suggested.total >= 0.01;
     const hasUnexplained = Math.abs(details.unexplained) >= 0.01;
     const hasPostSnapshotMovements = balances.applied && balances.applied.length > 0;
-    if(!hasUnexplained && !hasPostSnapshotMovements) return '';
+    if(!hasUnexplained && !hasPostSnapshotMovements && !hasSuggestedYield) return '';
     const deltas = details.accountDeltas.length
       ? details.accountDeltas.map(x => `${escapeHtml(x.label)} ${x.delta>=0?'+':''}${privateMoney(x.delta)}`).join(' • ')
       : 'Sem variação por conta.';
@@ -200,7 +202,10 @@
       ? `${balances.applied.length} lançamento(s) depois da última base já estão sendo somados ao saldo vivo.`
       : 'Nenhum lançamento depois da última base.';
     const tone = hasUnexplained ? 'warn' : 'good';
-    return `<section class="card audit-card"><div class="card-title"><div><span class="eyebrow">Conferência</span><h2>Patrimônio auditado</h2><p>O app compara a última base com a anterior para separar base, movimentos e diferenças não classificadas.</p></div><span class="pill ${tone}">${hasUnexplained?'Revisar':'OK'}</span></div><div class="mini-stats"><div><span>Variação entre bases</span><b>${privateMoney(details.delta)}</b></div><div><span>Explicado por lançamentos</span><b>${privateMoney(details.explained)}</b></div><div><span>Sem classificação</span><b>${privateMoney(details.unexplained)}</b></div><div><span>Movimentos pós-base</span><b>${state.settings.hideBalances?'•••':(balances.applied||[]).length}</b></div></div><div class="logic-note ${tone}"><b>Leitura:</b> ${deltas}. ${movementText} ${hasUnexplained?'Se essa diferença for CDI/rendimento, registre em Rendimentos ou preencha os campos de rendimento na base do dia para relatórios mais fiéis.':''}</div></section>`;
+    const yieldText = hasSuggestedYield
+      ? `<div class="logic-note good"><b>Provável rendimento CDI detectado:</b> Futuro ${privateMoney(suggested.futuro)} • Giro ${privateMoney(suggested.giro)} • Total ${privateMoney(suggested.total)}. ${details.snapshotYield < 0.01 ? '<button class="link-btn" data-action="applyLatestYieldSuggestion">Aplicar na última base</button>' : 'A última base já tem rendimento informado.'}</div>`
+      : '';
+    return `<section class="card audit-card"><div class="card-title"><div><span class="eyebrow">Conferência</span><h2>Patrimônio auditado</h2><p>O app compara a última base com a anterior, desconta lançamentos e separa o que parece CDI/rendimento.</p></div><span class="pill ${tone}">${hasUnexplained?'Revisar':'OK'}</span></div><div class="mini-stats"><div><span>Variação entre bases</span><b>${privateMoney(details.delta)}</b></div><div><span>Explicado por lançamentos</span><b>${privateMoney(details.explained)}</b></div><div><span>Provável rendimento</span><b>${privateMoney(suggested.total)}</b></div><div><span>Movimentos pós-base</span><b>${state.settings.hideBalances?'•••':(balances.applied||[]).length}</b></div></div><div class="logic-note ${tone}"><b>Leitura:</b> ${deltas}. ${movementText} ${hasUnexplained?'Se o valor não for rendimento, lance a entrada/transferência correta antes de fechar a base.':''}</div>${yieldText}</section>`;
   }
   function renderRecentHistory(){
     const items = combinedHistory().slice(0,6);
@@ -223,8 +228,65 @@
       <section class="card"><div class="card-title"><div><span class="eyebrow">Saldo vivo agora</span><h2>Antes de lançar</h2></div></div><div class="account-grid">${C.ASSET_ACCOUNTS.map(k=>`<div class="account-card"><span>${accountTitle(k)}</span><b>${privateMoney(balances.assets[k])}</b></div>`).join('')}<div class="account-card debt"><span>Fatura aberta</span><b>${privateMoney(balances.faturaAberta)}</b></div></div></section>
     `;
   }
+  function buildPatrimonioDraftFromValues(values, item){
+    return C.normalizeSnapshot({
+      id: (item && item.id) || values.id || C.id('pat_preview'),
+      createdAt: (item && item.createdAt) || values.createdAt || C.nowISO(),
+      updatedAt: C.nowISO(),
+      data: values.data || C.todayISO(),
+      futuro: values.futuro, giro: values.giro, carteira: values.carteira, banco: values.banco, investimentos: values.investimentos,
+      faturaAberta: values.faturaAberta, outrasDividas: values.outrasDividas,
+      rendimentoFuturo: values.rendimentoFuturo || 0, rendimentoGiro: values.rendimentoGiro || 0,
+      observacoes: values.observacoes || ''
+    });
+  }
+  function draftFromPatrimonioForm(form){
+    return buildPatrimonioDraftFromValues({
+      id: form.dataset.id || '',
+      createdAt: form.dataset.id ? (state.patrimonio.find(p=>p.id===form.dataset.id)?.createdAt || C.nowISO()) : C.nowISO(),
+      data: fieldValue(form,'data'),
+      futuro: moneyValue(form,'futuro'), giro: moneyValue(form,'giro'), carteira: moneyValue(form,'carteira'), banco: moneyValue(form,'banco'), investimentos: moneyValue(form,'investimentos'),
+      faturaAberta: moneyValue(form,'faturaAberta'), outrasDividas: moneyValue(form,'outrasDividas'),
+      rendimentoFuturo: moneyValue(form,'rendimentoFuturo'), rendimentoGiro: moneyValue(form,'rendimentoGiro'),
+      observacoes: fieldValue(form,'observacoes')
+    });
+  }
+  function renderYieldAssist(estimate, current){
+    if(!estimate || !estimate.ok) return `<div class="logic-note"><b>Rendimento automático:</b> salve pelo menos uma base anterior para o app conseguir comparar um dia com o outro.</div>`;
+    const suggested = estimate.suggested || {futuro:0,giro:0,total:0};
+    const diffLines = estimate.assetDiffs
+      .filter(x => Math.abs(x.diff) >= 0.01)
+      .map(x => `${escapeHtml(x.label)}: real ${privateMoney(x.actual)} • esperado ${privateMoney(x.expected)} • diferença ${x.diff>=0?'+':''}${privateMoney(x.diff)}`)
+      .join('<br>') || 'Nenhuma diferença relevante.';
+    const movementCount = estimate.movements.length;
+    const tone = suggested.total >= 0.01 ? 'good' : 'neutral';
+    const button = suggested.total >= 0.01 ? `<button class="ghost-btn compact" type="button" data-action="applyYieldSuggestion">Usar sugestão</button>` : '';
+    return `<div class="logic-note ${tone}" data-role="yield-suggestion"><b>Ajuda do rendimento:</b> comparando com ${C.formatDateBR(estimate.previous.data)}, descontando ${movementCount} lançamento(s), o app sugere CDI de <b>Futuro ${privateMoney(suggested.futuro)}</b> e <b>Giro ${privateMoney(suggested.giro)}</b>. ${button}<br><small>${diffLines}</small></div>`;
+  }
+  function applyYieldSuggestionToForm(form){
+    const draft = draftFromPatrimonioForm(form);
+    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCreatedAt: draft.createdAt});
+    if(!estimate || !estimate.ok) return notify('Ainda não existe base anterior para calcular rendimento.', 'warn');
+    form.elements.rendimentoFuturo.value = C.currencyInput(estimate.suggested.futuro);
+    form.elements.rendimentoGiro.value = C.currencyInput(estimate.suggested.giro);
+    const box = $('[data-role="yield-suggestion"]', form);
+    if(box) box.outerHTML = renderYieldAssist(estimate, draft);
+    notify('Sugestão de rendimento aplicada nos campos da base.', 'success');
+  }
+  function refreshYieldSuggestionBox(form){
+    const box = $('[data-role="yield-suggestion"]', form);
+    if(!box) return;
+    const draft = draftFromPatrimonioForm(form);
+    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCreatedAt: draft.createdAt});
+    box.outerHTML = renderYieldAssist(estimate, draft);
+  }
+
   function patrimonioForm(item){
-    const p = item ? C.normalizeSnapshot(item) : Object.assign({data:C.todayISO()}, C.calculateBalances(state).assets, {faturaAberta:C.calculateBalances(state).faturaAberta, outrasDividas:C.calculateBalances(state).outrasDividas, rendimentoFuturo:0, rendimentoGiro:0, observacoes:''});
+    const balancesNow = C.calculateBalances(state);
+    const baseValues = item ? C.normalizeSnapshot(item) : Object.assign({data:C.todayISO(), createdAt:C.nowISO()}, balancesNow.assets, {faturaAberta:balancesNow.faturaAberta, outrasDividas:balancesNow.outrasDividas, rendimentoFuturo:0, rendimentoGiro:0, observacoes:''});
+    const preview = buildPatrimonioDraftFromValues(baseValues, item || null);
+    const estimate = C.estimateSnapshotYields(state, preview, {excludeId:item?item.id:preview.id, currentCreatedAt:preview.createdAt});
+    const p = C.normalizeSnapshot(Object.assign({}, baseValues, (!item && estimate && estimate.ok && estimate.suggested.total >= 0.01) ? {rendimentoFuturo:estimate.suggested.futuro, rendimentoGiro:estimate.suggested.giro} : {}));
     return `<form class="form" data-form="patrimonio" data-id="${item?escapeHtml(p.id):''}">
       <div class="form-grid">
         <label>Data<input type="date" name="data" value="${p.data}" required></label>
@@ -235,9 +297,10 @@
         <label>Outros investimentos<input class="money-field" name="investimentos" inputmode="decimal" value="${C.currencyInput(p.investimentos)}" placeholder="0,00"></label>
         <label>Fatura aberta<input class="money-field" name="faturaAberta" inputmode="decimal" value="${C.currencyInput(p.faturaAberta)}" placeholder="0,00"></label>
         <label>Outras dívidas<input class="money-field" name="outrasDividas" inputmode="decimal" value="${C.currencyInput(p.outrasDividas)}" placeholder="0,00"></label>
-        <label>Rendimento Futuro do dia<input class="money-field" name="rendimentoFuturo" inputmode="decimal" value="${C.currencyInput(p.rendimentoFuturo)}" placeholder="opcional"></label>
-        <label>Rendimento Giro do dia<input class="money-field" name="rendimentoGiro" inputmode="decimal" value="${C.currencyInput(p.rendimentoGiro)}" placeholder="opcional"></label>
+        <label>Rendimento Futuro calculado<input class="money-field" name="rendimentoFuturo" inputmode="decimal" value="${C.currencyInput(p.rendimentoFuturo)}" placeholder="0,00"></label>
+        <label>Rendimento Giro calculado<input class="money-field" name="rendimentoGiro" inputmode="decimal" value="${C.currencyInput(p.rendimentoGiro)}" placeholder="0,00"></label>
       </div>
+      ${renderYieldAssist(estimate, p)}
       <label>Observação<input name="observacoes" value="${escapeHtml(p.observacoes)}" placeholder="Conferência do dia"></label>
       <div class="form-actions"><button class="primary-btn" type="submit">Salvar patrimônio</button>${item?'<button class="danger-btn" type="button" data-action="deleteSnapshot" data-id="'+escapeHtml(p.id)+'">Excluir</button>':''}</div>
     </form>`;
@@ -303,12 +366,12 @@
     const month = C.getMonthlySummary(state);
     const yields = state.movements.filter(m => C.normalizeMovement(m).type === 'rendimento').map(C.normalizeMovement).sort(C.sortDesc);
     const snapshotYield = state.patrimonio.reduce((sum,p)=> sum + C.normalizeSnapshot(p).rendimentoFuturo + C.normalizeSnapshot(p).rendimentoGiro, 0);
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Rendimentos</span><h2>Caixinhas separadas</h2><p>Registre rendimento manualmente quando quiser separar CDI de faturamento.</p></div></div><div class="mini-stats"><div><span>Futuro agora</span><b>${privateMoney(balances.assets.futuro)}</b></div><div><span>Giro agora</span><b>${privateMoney(balances.assets.giro)}</b></div><div><span>Rendimento mês</span><b>${privateMoney(month.yield)}</b></div><div><span>Rendimento em bases</span><b>${privateMoney(snapshotYield)}</b></div></div><form class="form" data-form="quick-yield"><div class="form-grid"><label>Data<input type="date" name="data" value="${C.todayISO()}"></label><label>Caixinha<select name="account"><option value="futuro">Caixinha Futuro</option><option value="giro">Caixinha Giro</option></select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" placeholder="0,00"></label></div><button class="primary-btn" type="submit">Salvar rendimento</button></form></section><section class="card"><div class="card-title"><div><span class="eyebrow">Histórico</span><h2>Rendimentos lançados</h2></div></div>${yields.length?`<div class="list">${yields.slice(0,12).map(m=>renderHistoryItem({kind:'movement', item:m, data:m.data, createdAt:m.createdAt})).join('')}</div>`:'<div class="empty">Nenhum rendimento manual lançado ainda.</div>'}</section></div>`;
+    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Rendimentos</span><h2>Caixinhas separadas</h2><p>O app pode sugerir o CDI pela diferença diária das caixinhas; aqui você também pode lançar manualmente se precisar.</p></div></div><div class="mini-stats"><div><span>Futuro agora</span><b>${privateMoney(balances.assets.futuro)}</b></div><div><span>Giro agora</span><b>${privateMoney(balances.assets.giro)}</b></div><div><span>Rendimento mês</span><b>${privateMoney(month.yield)}</b></div><div><span>Rendimento em bases</span><b>${privateMoney(snapshotYield)}</b></div></div><form class="form" data-form="quick-yield"><div class="form-grid"><label>Data<input type="date" name="data" value="${C.todayISO()}"></label><label>Caixinha<select name="account"><option value="futuro">Caixinha Futuro</option><option value="giro">Caixinha Giro</option></select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" placeholder="0,00"></label></div><button class="primary-btn" type="submit">Salvar rendimento</button></form></section><section class="card"><div class="card-title"><div><span class="eyebrow">Histórico</span><h2>Rendimentos lançados</h2></div></div>${yields.length?`<div class="list">${yields.slice(0,12).map(m=>renderHistoryItem({kind:'movement', item:m, data:m.data, createdAt:m.createdAt})).join('')}</div>`:'<div class="empty">Nenhum rendimento manual lançado ainda.</div>'}</section></div>`;
   }
 
   function renderPerfil(){
     const lastBackup = state.settings.lastBackupAt ? new Date(state.settings.lastBackupAt).toLocaleString('pt-BR') : 'Nunca';
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Atualização</span><h2>Cache e ícone</h2><p>Use se o navegador continuar mostrando versão ou ícone antigo depois de publicar.</p></div><span class="pill">v13.04</span></div><div class="quick-row stack"><button class="ghost-btn" data-action="refreshApp">Atualizar app e limpar cache</button></div><div class="logic-note"><b>Seguro:</b> seus dados ficam no backup/localStorage. Mesmo assim, baixe um backup antes se estiver em dúvida.</div></section><section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
+    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section>${state.settings.devMode ? '<section class="card"><div class="card-title"><div><span class="eyebrow">Ferramenta dev</span><h2>Cache e atualização</h2><p>Ferramenta temporária para desenvolvimento local. Não aparece no modo usuário.</p></div><span class="pill">v13.05</span></div><div class="quick-row stack"><button class="ghost-btn" data-action="refreshApp">Atualizar app e limpar cache</button></div><div class="logic-note"><b>Produto final:</b> em versão pública/nuvem, isso fica oculto por ambiente/admin.</div></section>' : ''}<section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
   }
 
   function openModal(html){
@@ -344,9 +407,20 @@
     if(!C.isValidDate(item.data)) return notify('Informe uma data válida.', 'warn');
     backupBefore('salvar-patrimonio');
     const idx = state.patrimonio.findIndex(p=>p.id===item.id);
-    if(idx >= 0) state.patrimonio[idx] = item; else state.patrimonio.push(item);
+    if(idx >= 0){
+      state.patrimonio[idx] = item;
+    } else {
+      const sameDayIdx = state.patrimonio.findIndex(p => C.normalizeSnapshot(p).data === item.data);
+      if(sameDayIdx >= 0){
+        item.id = state.patrimonio[sameDayIdx].id;
+        item.createdAt = state.patrimonio[sameDayIdx].createdAt || item.createdAt;
+        state.patrimonio[sameDayIdx] = item;
+      } else {
+        state.patrimonio.push(item);
+      }
+    }
     state.patrimonio.sort(C.sortByDateThenCreated);
-    saveState(); closeModal(); currentView='dashboard'; render(); notify('Patrimônio salvo e cálculos atualizados.', 'success');
+    saveState(); closeModal(); currentView='dashboard'; render(); notify('Patrimônio salvo, rendimento conferido e cálculos atualizados.', 'success');
   }
   function saveMovementForm(form){
     const type = fieldValue(form,'type') || 'entrada';
@@ -405,6 +479,20 @@
     backupBefore('salvar-rendimento');
     state.movements.push(item); state.movements.sort(C.sortByDateThenCreated); saveState(); render(); notify('Rendimento salvo separado do faturamento.', 'success');
   }
+  function applyLatestYieldSuggestion(){
+    const details = C.snapshotDeltaDetails(state);
+    if(!details || !details.current || !details.suggestedYield || details.suggestedYield.total < 0.01) return notify('Não há rendimento provável para aplicar na última base.', 'warn');
+    const idx = state.patrimonio.findIndex(p => p.id === details.current.id);
+    if(idx < 0) return notify('Não encontrei a última base para atualizar.', 'warn');
+    backupBefore('aplicar-rendimento-sugerido');
+    const current = C.normalizeSnapshot(state.patrimonio[idx]);
+    current.rendimentoFuturo = details.suggestedYield.futuro;
+    current.rendimentoGiro = details.suggestedYield.giro;
+    current.updatedAt = C.nowISO();
+    state.patrimonio[idx] = current;
+    saveState(); render(); notify('Rendimento provável aplicado na última base.', 'success');
+  }
+
   function deleteSnapshot(id){
     if(!confirm('Excluir este patrimônio?')) return;
     backupBefore('excluir-patrimonio');
@@ -485,6 +573,8 @@
     if(action === 'exportCSV') exportCSV();
     if(action === 'resetApp') resetApp();
     if(action === 'refreshApp') refreshAppCache();
+    if(action === 'applyYieldSuggestion') applyYieldSuggestionToForm(btn.closest('form'));
+    if(action === 'applyLatestYieldSuggestion') applyLatestYieldSuggestion();
   });
   function applyMoneyMask(input){
     if(!input) return;
@@ -505,6 +595,8 @@
     const input = ev.target.closest('input.money-field');
     if(!input) return;
     applyMoneyMask(input);
+    const form = input.closest('form[data-form="patrimonio"]');
+    if(form && !['rendimentoFuturo','rendimentoGiro'].includes(input.name)) refreshYieldSuggestionBox(form);
   });
   document.addEventListener('focusout', (ev)=>{
     const input = ev.target.closest('input.money-field');
@@ -539,6 +631,8 @@
       };
       dynamic.innerHTML = movementDynamicFields(old);
     }
+    const patDate = ev.target.closest('form[data-form="patrimonio"] input[name="data"]');
+    if(patDate) refreshYieldSuggestionBox(patDate.closest('form'));
     const file = ev.target.matches('[data-action="importBackupFile"]') ? ev.target.files[0] : null;
     if(file) importBackupFile(file);
   });
@@ -549,7 +643,7 @@
     setRuntimeIcon();
     render();
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('./service-worker.js?v=1304').then(reg => {
+      navigator.serviceWorker.register('./service-worker.js?v=1305').then(reg => {
         if(reg && reg.update) reg.update().catch(()=>{});
       }).catch(()=>{});
     }

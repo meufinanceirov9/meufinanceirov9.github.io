@@ -1,29 +1,38 @@
-# Financeiro CRM v13.04
+# Financeiro CRM v13.05
 
-Build: `2026-07-09-v13-04-backup-auditoria-cache-icone`
+Build: `2026-07-09-v13-05-rendimento-automatico-caixinhas`
 
-Base visual preservada da linha v13. Esta versão mantém o modo local estável e melhora conferência, cache e favicon.
+Versão local estável baseada na v13.04, mantendo o visual aprovado da linha v13 e adicionando ajuda automática para rendimento das caixinhas.
 
-## Melhorias da v13.04
+## Melhorias da v13.05
 
-- Mantém o visual aprovado da v13 como identidade fixa.
-- Mantém a máscara monetária padronizada da v13.01.
-- Mantém o ícone visual da v13.02/v13.03, agora com nomes únicos de arquivo para driblar cache agressivo do navegador.
-- Adiciona botão em **Perfil > Atualização > Atualizar app e limpar cache**.
-- Service worker agora usa **network-first para navegação/HTML**, reduzindo chance de ficar preso em tela ou ícone antigo.
-- Dashboard ganhou card de **Conferência / Patrimônio auditado** quando houver diferença entre as duas últimas bases ou movimentos posteriores à base atual.
-- A auditoria mostra variação entre bases, parte explicada por movimentos e parte sem classificação.
-- O resumo mensal passa a considerar também rendimentos preenchidos nos campos de rendimento da base de patrimônio.
-- Testes ampliados para auditoria de variação entre patrimônios e rendimento informado em base.
+- Mantém o frontend da v13 como padrão visual cravado.
+- Mantém máscara monetária padronizada da v13.01.
+- Mantém cache/ícone versionado da v13.04.
+- Adiciona cálculo assistido de rendimento por diferença diária:
+  - compara a base de patrimônio atual com a base anterior;
+  - desconta movimentos lançados entre as bases;
+  - sugere rendimento provável para Caixinha Futuro e Caixinha Giro;
+  - evita tratar uma entrada lançada, como entregas no Giro, como rendimento.
+- O formulário de patrimônio completo passa a mostrar uma caixa de “Ajuda do rendimento”.
+- Ao registrar nova base, os campos de rendimento Futuro/Giro são preenchidos com a sugestão quando houver diferença provável de CDI.
+- O Dashboard mostra “Provável rendimento” na auditoria entre bases.
+- Adiciona ação para aplicar o rendimento provável na última base caso ela ainda esteja sem rendimento informado.
+- Evita duplicar bases no mesmo dia: ao salvar uma nova base para uma data que já existe, o app atualiza a base daquele dia.
+- Ferramenta “Atualizar app e limpar cache” fica oculta no modo usuário e aparece apenas no modo desenvolvedor.
 
-## Sobre o backup analisado
+## Regra importante
 
-No backup de 09/07/2026 v13.03, a estrutura está válida. A diferença de R$ 7,80 entre os patrimônios de 08/07 e 09/07 aparece como sem classificação, causada por aumento de R$ 7,54 na Caixinha Futuro e R$ 0,26 na Caixinha Giro. Isso parece rendimento/variação de base, mas não foi registrado nos campos de rendimento. A v13.04 passa a avisar isso no Dashboard.
+Rendimento aumenta patrimônio, mas não entra como faturamento de trabalho. Entradas lançadas em Giro/Futuro são descontadas antes do cálculo de rendimento sugerido.
+
+Exemplo testado:
+
+- Futuro: R$ 14.362,91 → R$ 14.370,45 = R$ 7,54 sugerido como rendimento.
+- Giro: R$ 529,47 → R$ 574,73 com entrada lançada de R$ 45,00 = apenas R$ 0,26 sugerido como rendimento.
+- Total sugerido: R$ 7,80, sem confundir os R$ 45,00 de entregas com CDI.
 
 ## Publicação
 
-Suba todos os arquivos da pasta para a raiz do GitHub Pages. Depois de publicar, abra:
+Suba todos os arquivos desta pasta na raiz do GitHub Pages. Depois acesse:
 
-`https://SEU_USUARIO.github.io/?v=1304`
-
-Se o navegador continuar mostrando ícone antigo, vá em Perfil e use **Atualizar app e limpar cache**.
+`https://SEU_USUARIO.github.io/?v=1305`

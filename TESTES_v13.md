@@ -1,15 +1,19 @@
-# Testes v13.04
+# Testes v13.05
 
 Executados:
 
 - `node --check core.js`
 - `node --check app.js`
 - `node tests/core.test.js`
-- Migração do backup v13.03 real enviado pelo usuário.
-- Validação estrutural do backup: OK.
-- Cálculo do saldo vivo a partir do backup: patrimônio líquido R$ 14.072,82 após aplicar o lançamento de R$ 45,00 posterior à base de 09/07.
-- Auditoria entre últimas bases: diferença R$ 7,80, sem movimentos explicando, com variação em Futuro R$ 7,54 e Giro R$ 0,26.
-- Manifest, ícones e service worker atualizados para v13.04.
-- ZIP testado com integridade.
-
-Teste visual final ainda deve ser feito no navegador publicado.
+- Validação de parser monetário brasileiro.
+- Validação da máscara de centavos subindo casas.
+- Validação de patrimônio bruto/líquido.
+- Validação de compra no cartão e pagamento do cartão.
+- Validação de iFood dinheiro com troco.
+- Validação de transferência inválida.
+- Validação de migração de backup v13.
+- Validação de rendimento informado em base de patrimônio.
+- Validação da auditoria entre bases.
+- Validação nova v13.05: rendimento estimado por diferença diária descontando lançamento de entrada no Giro.
+- Validação nova v13.05: sem base anterior, o app não estima rendimento.
+- Manifest, ícones e service worker atualizados para v13.05.

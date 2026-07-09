@@ -1,8 +1,8 @@
 (function(global){
   'use strict';
 
-  const APP_VERSION = 'v13.04';
-  const BUILD_ID = '2026-07-09-v13-04-backup-auditoria-cache-icone';
+  const APP_VERSION = 'v13.05';
+  const BUILD_ID = '2026-07-09-v13-05-rendimento-automatico-caixinhas';
   const STORAGE_KEY = 'financeiro-crm-v13-local';
   const BACKUP_PREFIX = 'backup-financeiro-crm';
 
@@ -369,6 +369,108 @@
     return {income:0, expense:0, yield:0, net:0};
   }
 
+  function emptyAccountDelta(){
+    const assets = {};
+    ASSET_ACCOUNTS.forEach(k => assets[k] = 0);
+    return {assets, faturaAberta:0, outrasDividas:0};
+  }
+
+  function accountImpact(m){
+    const x = normalizeMovement(m);
+    const impact = emptyAccountDelta();
+    if(x.type === 'entrada'){
+      impact.assets[x.account] = round2(impact.assets[x.account] + x.value);
+    } else if(x.type === 'saida'){
+      impact.assets[x.account] = round2(impact.assets[x.account] - x.value);
+    } else if(x.type === 'transferencia'){
+      impact.assets[x.fromAccount] = round2(impact.assets[x.fromAccount] - x.value);
+      impact.assets[x.toAccount] = round2(impact.assets[x.toAccount] + x.value);
+    } else if(x.type === 'rendimento'){
+      impact.assets[x.account] = round2(impact.assets[x.account] + x.value);
+    } else if(x.type === 'ifood_dinheiro'){
+      impact.assets.carteira = round2(impact.assets.carteira + x.received);
+      impact.assets.giro = round2(impact.assets.giro - x.change);
+    } else if(x.type === 'cartao'){
+      impact.faturaAberta = round2(impact.faturaAberta + x.value);
+    } else if(x.type === 'pagamento_cartao'){
+      impact.assets[x.account] = round2(impact.assets[x.account] - x.value);
+      impact.faturaAberta = round2(impact.faturaAberta - x.value);
+    }
+    return impact;
+  }
+
+  function addAccountImpact(total, impact){
+    const acc = total || emptyAccountDelta();
+    const inc = impact || emptyAccountDelta();
+    ASSET_ACCOUNTS.forEach(k => acc.assets[k] = round2((acc.assets[k] || 0) + (inc.assets[k] || 0)));
+    acc.faturaAberta = round2((acc.faturaAberta || 0) + (inc.faturaAberta || 0));
+    acc.outrasDividas = round2((acc.outrasDividas || 0) + (inc.outrasDividas || 0));
+    return acc;
+  }
+
+  function movementCreatedBetween(movement, previous, currentCreatedAt){
+    const created = String(movement.createdAt || '');
+    if(previous && created && String(previous.createdAt || '') && created <= String(previous.createdAt || '')) return false;
+    if(currentCreatedAt && created && created > String(currentCreatedAt)) return false;
+    return true;
+  }
+
+  function movementsBetweenSnapshots(state, previous, draftSnapshot){
+    if(!previous || !draftSnapshot) return [];
+    const current = normalizeSnapshot(draftSnapshot);
+    const currentCreatedAt = current.createdAt || nowISO();
+    return (state && Array.isArray(state.movements) ? state.movements : [])
+      .map(normalizeMovement)
+      .filter(m => m.data >= previous.data && m.data <= current.data)
+      .filter(m => movementCreatedBetween(m, previous, currentCreatedAt))
+      .sort(sortByDateThenCreated);
+  }
+
+  function estimateSnapshotYields(state, draftSnapshot, options){
+    const opts = options || {};
+    const current = normalizeSnapshot(Object.assign({}, draftSnapshot || {}, {createdAt: (draftSnapshot && draftSnapshot.createdAt) || opts.currentCreatedAt || nowISO()}));
+    const excludeId = opts.excludeId || current.id || '';
+    const previous = (state && Array.isArray(state.patrimonio) ? state.patrimonio : [])
+      .map(normalizeSnapshot)
+      .filter(p => p.id !== excludeId)
+      .filter(p => p.data <= current.data)
+      .sort(sortDesc)[0] || null;
+
+    if(!previous){
+      return {ok:false, reason:'Sem base anterior para comparar.', previous:null, current, expected:null, movements:[], movementDelta:emptyAccountDelta(), assetDiffs:[], suggested:{futuro:0,giro:0,total:0}, liabilities:{faturaAberta:0,outrasDividas:0}, unexplainedTotal:0};
+    }
+
+    const prevSums = snapshotAssets(previous);
+    const currentSums = snapshotAssets(current);
+    const movements = movementsBetweenSnapshots(state, previous, current);
+    const movementDelta = movements.reduce((total,m) => addAccountImpact(total, accountImpact(m)), emptyAccountDelta());
+    const expectedAssets = {};
+    ASSET_ACCOUNTS.forEach(k => expectedAssets[k] = round2((prevSums.assets[k] || 0) + (movementDelta.assets[k] || 0)));
+    const expectedFaturaAberta = round2(Math.max(0, prevSums.faturaAberta + movementDelta.faturaAberta));
+    const expectedOutrasDividas = round2(prevSums.outrasDividas + movementDelta.outrasDividas);
+
+    const assetDiffs = ASSET_ACCOUNTS.map(k => {
+      const actual = round2(currentSums.assets[k] || 0);
+      const expected = round2(expectedAssets[k] || 0);
+      return {account:k, label:ACCOUNT_LABELS[k], previous:round2(prevSums.assets[k] || 0), movementDelta:round2(movementDelta.assets[k] || 0), expected, actual, diff:round2(actual - expected)};
+    });
+    const suggestedFuturo = round2(Math.max(0, assetDiffs.find(x=>x.account==='futuro')?.diff || 0));
+    const suggestedGiro = round2(Math.max(0, assetDiffs.find(x=>x.account==='giro')?.diff || 0));
+    const liabilities = {
+      faturaAberta: round2(currentSums.faturaAberta - expectedFaturaAberta),
+      outrasDividas: round2(currentSums.outrasDividas - expectedOutrasDividas)
+    };
+    const unexplainedTotal = round2(assetDiffs.reduce((sum,x)=>sum+x.diff,0) - liabilities.faturaAberta - liabilities.outrasDividas);
+
+    return {
+      ok:true, previous, current,
+      expected:{assets:expectedAssets, faturaAberta:expectedFaturaAberta, outrasDividas:expectedOutrasDividas},
+      movements, movementDelta, assetDiffs,
+      suggested:{futuro:suggestedFuturo, giro:suggestedGiro, total:round2(suggestedFuturo + suggestedGiro)},
+      liabilities, unexplainedTotal
+    };
+  }
+
   function calculateGoal(state, asOfDate){
     const goal = normalizeGoal(state && state.settings && state.settings.goal);
     const balances = calculateBalances(state, {asOfDate: asOfDate || todayISO()});
@@ -436,6 +538,7 @@
       label: ACCOUNT_LABELS[k],
       delta: round2((curr.assets[k] || 0) - (prev.assets[k] || 0))
     })).filter(x => Math.abs(x.delta) >= 0.01);
+    const yieldEstimate = estimateSnapshotYields(state, current, {excludeId: current.id, currentCreatedAt: current.createdAt});
     return {
       previous, current,
       delta: diff ? diff.delta : round2(curr.liquido - prev.liquido),
@@ -446,6 +549,8 @@
       faturaDelta: round2(curr.faturaAberta - prev.faturaAberta),
       outrasDividasDelta: round2(curr.outrasDividas - prev.outrasDividas),
       snapshotYield: round2(current.rendimentoFuturo + current.rendimentoGiro),
+      yieldEstimate,
+      suggestedYield: yieldEstimate && yieldEstimate.ok ? yieldEstimate.suggested : {futuro:0,giro:0,total:0},
       previousLiquid: prev.liquido,
       currentLiquid: curr.liquido
     };
@@ -480,7 +585,7 @@
     parseCurrencyBR, formatCurrencyBR, currencyInput, currencyInputFromCentsDigits, normalizeCurrencyInputDisplay,
     defaultState, migrateState, normalizeGoal, normalizeSnapshot, normalizeMovement,
     sortByDateThenCreated, sortDesc, snapshotAssets, getLatestSnapshot, calculateBalances,
-    movementImpact, calculateGoal, getMonthlySummary, explainSnapshotDifference, snapshotDeltaDetails, validateState,
+    movementImpact, accountImpact, estimateSnapshotYields, calculateGoal, getMonthlySummary, explainSnapshotDifference, snapshotDeltaDetails, validateState,
     defaultMovementDescription
   };
 
