@@ -1,9 +1,9 @@
-# Documento Mestre — Financeiro CRM v13.01
+# Documento Mestre — Financeiro CRM v13.03
 
 ## Versão-base
 
-- Versão: **v13.01**
-- Build: **2026-07-08-v13-01-mascara-valores-padronizada**
+- Versão: **v13.03**
+- Build: **2026-07-09-v13-03-revisao-funcionamento-local**
 - Estratégia: reconstrução técnica local estável, preservando o visual v13 como padrão do app.
 - Nuvem/login: **bloqueados nesta versão**. O app funciona sem Supabase e sem chave externa.
 - Dados reais: versão iniciada como app zerado, conforme autorização do usuário.
@@ -124,7 +124,8 @@ Campos principais:
 
 - v13.00: reconstrução local estável.
 - v13.01: máscara de valores monetários padronizada, preservando visual v13.
-- v13.02 etc.: correções pequenas.
+- v13.02: ícone da página/favicon padronizado com o visual v13 do app.
+- v13.03: revisão de funcionamento local, privacidade do modo ocultar saldos, validações extras e CSV completo.
 - v13.10: futura sincronização em nuvem, se a base local estiver estável.
 - v14.00: apenas para mudança grande de produto/arquitetura.
 
@@ -148,5 +149,7 @@ Campos principais:
 - Histórico permite editar e excluir.
 - Backup JSON exporta.
 - Backup JSON importa.
-- CSV exporta.
+- CSV exporta com componentes completos do patrimônio.
+- Modo ocultar saldos não revela valores por porcentagem/barra.
+- iFood em dinheiro bloqueia troco maior que recebido.
 - Fechar e abrir mantém dados no localStorage.

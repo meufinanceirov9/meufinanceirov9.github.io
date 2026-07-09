@@ -1,4 +1,4 @@
-# Testes executados — Financeiro CRM v13.01
+# Testes executados — Financeiro CRM v13.03
 
 ## Testes automáticos de core
 
@@ -24,7 +24,10 @@ Cobertura principal:
 - Rendimento separado de faturamento.
 - Alteração de prazo da meta alterando ritmo mensal.
 - Validação estrutural do estado.
+- Bloqueio estrutural de iFood com troco maior que recebido.
+- Bloqueio estrutural de transferência com origem/destino iguais.
 - Migração de backup embrulhado em `{ data: ... }`.
+- Migração de backup v13 antigo preservando objetivo e patrimônio líquido.
 
 ## Testes manuais recomendados no navegador
 
@@ -50,3 +53,12 @@ Cobertura principal:
 ## Observação
 
 A linha v13 local não testa login porque login/nuvem foi intencionalmente desativado nesta etapa.
+
+
+## Verificação v13.03
+
+- Privacidade do botão Ocultar saldos revisada.
+- CSV completo revisado para exportar componentes do patrimônio.
+- Validação do iFood em dinheiro revisada.
+- Testes automáticos ampliados para backup antigo e erros estruturais.
+- Versão/cache atualizados para `v=1303`.

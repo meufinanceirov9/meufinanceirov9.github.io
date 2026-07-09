@@ -39,6 +39,8 @@
     return String(str ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   }
   function privateMoney(value){ return state.settings.hideBalances ? 'R$ •••••' : C.formatCurrencyBR(value); }
+  function privatePercent(value, digits=2){ return state.settings.hideBalances ? '•••' : `${Number(value || 0).toFixed(digits)}%`; }
+  function privateBarWidth(value){ return state.settings.hideBalances ? 0 : Math.min(100, Math.max(0, value || 0)); }
   function fieldValue(form, name){ return (form.elements[name] && form.elements[name].value) || ''; }
   function moneyValue(form, name){ return C.parseCurrencyBR(fieldValue(form,name)); }
   function accountOptions(selected){
@@ -121,13 +123,13 @@
     const balances = C.calculateBalances(state);
     const goal = C.calculateGoal(state);
     const month = C.getMonthlySummary(state);
-    const progressWidth = Math.min(100, Math.max(0, goal.progress));
+    const progressWidth = privateBarWidth(goal.progress);
     const snapText = balances.snapshot ? `Base: ${C.formatDateBR(balances.snapshot.data)}` : 'Sem patrimônio base ainda';
     const dueText = goal.overdue ? 'Prazo vencido' : goal.dueToday ? 'Prazo hoje' : `${goal.days} dia(s) restantes`;
     const composition = C.ASSET_ACCOUNTS.map(k => {
       const value = balances.assets[k] || 0;
       const pct = balances.bruto > 0 ? Math.max(0, value / balances.bruto * 100) : 0;
-      return `<div class="composition-row"><div><b>${accountTitle(k)}</b><small>${privateMoney(value)}</small></div><div class="bar"><span style="width:${Math.min(100,pct)}%"></span></div><em>${pct.toFixed(1)}%</em></div>`;
+      return `<div class="composition-row"><div><b>${accountTitle(k)}</b><small>${privateMoney(value)}</small></div><div class="bar"><span style="width:${privateBarWidth(pct)}%"></span></div><em>${privatePercent(pct,1)}</em></div>`;
     }).join('');
     return `
       <div class="hero-grid">
@@ -137,7 +139,7 @@
             <div class="metric big"><span>Patrimônio líquido</span><strong class="sensitive">${privateMoney(balances.liquido)}</strong><small>${snapText}</small></div>
             <div class="metric big"><span>Falta para <button class="inline-edit" data-action="editGoalTarget">${privateMoney(goal.goal.target)}</button></span><strong class="sensitive">${privateMoney(goal.falta)}</strong><small>Prazo: <button class="inline-edit" data-action="editGoalDue">${C.formatDateBR(goal.goal.due)}</button> • ${dueText}</small></div>
           </div>
-          <div class="progress-wrap"><div class="progress-info"><b>${goal.progress.toFixed(2)}% concluído</b><span>Ritmo necessário: ${privateMoney(goal.monthlyRequired)} / mês</span></div><div class="progress-bar"><span style="width:${progressWidth}%"></span></div></div>
+          <div class="progress-wrap"><div class="progress-info"><b>${privatePercent(goal.progress,2)} concluído</b><span>Ritmo necessário: ${privateMoney(goal.monthlyRequired)} / mês</span></div><div class="progress-bar"><span style="width:${progressWidth}%"></span></div></div>
           <div class="quick-row"><button class="primary-btn" data-action="quickPatrimonio">Registrar patrimônio completo</button><button class="ghost-btn" data-view="registrar">Novo lançamento</button><button class="ghost-btn" data-action="exportBackup">Baixar backup</button></div>
         </section>
         <section class="card status-card">
@@ -325,6 +327,7 @@
     });
     if(!C.isValidDate(item.data)) return notify('Informe uma data válida.', 'warn');
     if(type === 'ifood_dinheiro' && item.received <= 0) return notify('Informe o valor recebido em dinheiro.', 'warn');
+    if(type === 'ifood_dinheiro' && item.change > item.received) return notify('O troco não pode ser maior que o valor recebido.', 'warn');
     if(type !== 'ifood_dinheiro' && item.value <= 0) return notify('Informe um valor maior que zero.', 'warn');
     if(type === 'transferencia' && item.fromAccount === item.toAccount) return notify('Origem e destino precisam ser diferentes.', 'warn');
     backupBefore('salvar-movimento');
@@ -357,6 +360,7 @@
   function saveQuickYield(form){
     const item = C.normalizeMovement({type:'rendimento', data: fieldValue(form,'data'), account: fieldValue(form,'account'), value: moneyValue(form,'value'), description: `Rendimento ${accountTitle(fieldValue(form,'account'))}`});
     if(item.value <= 0) return notify('Informe o rendimento.', 'warn');
+    backupBefore('salvar-rendimento');
     state.movements.push(item); state.movements.sort(C.sortByDateThenCreated); saveState(); render(); notify('Rendimento salvo separado do faturamento.', 'success');
   }
   function deleteSnapshot(id){
@@ -376,12 +380,26 @@
     render(); notify('Backup JSON baixado.', 'success');
   }
   function exportCSV(){
-    const rows = [['tipo','data','descricao','conta_origem','conta_destino','valor','recebido','troco','observacao']];
-    state.patrimonio.forEach(p=>rows.push(['patrimonio',p.data,'Patrimônio líquido','','',C.snapshotAssets(p).liquido,'','',p.observacoes]));
-    state.movements.forEach(m=>rows.push([movementTypeLabel(m.type),m.data,m.description,m.fromAccount||'',m.toAccount||m.account||'',m.value,m.received,m.change,m.notes]));
-    const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g,'""')}"`).join(';')).join('\n');
+    const rows = [[
+      'registro','data','tipo','descricao','categoria','conta','conta_origem','conta_destino',
+      'valor','recebido','troco','futuro','giro','carteira','banco','investimentos',
+      'fatura_aberta','outras_dividas','rendimento_futuro','rendimento_giro','patrimonio_bruto','patrimonio_liquido','observacao'
+    ]];
+    state.patrimonio.map(C.normalizeSnapshot).forEach(p=>{
+      const sums = C.snapshotAssets(p);
+      rows.push([
+        'patrimonio', p.data, 'Patrimônio completo', 'Base real diária', '', '', '', '',
+        '', '', '', p.futuro, p.giro, p.carteira, p.banco, p.investimentos,
+        p.faturaAberta, p.outrasDividas, p.rendimentoFuturo, p.rendimentoGiro, sums.bruto, sums.liquido, p.observacoes
+      ]);
+    });
+    state.movements.map(C.normalizeMovement).forEach(m=>rows.push([
+      'movimento', m.data, movementTypeLabel(m.type), m.description, m.category, m.account || '', m.fromAccount || '', m.toAccount || '',
+      m.value, m.received, m.change, '', '', '', '', '', '', '', '', '', '', '', m.notes
+    ]));
+    const csv = '\ufeff' + rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g,'""')}"`).join(';')).join('\n');
     downloadFile(csv, `financeiro-crm-${C.todayISO()}-${C.APP_VERSION}.csv`, 'text/csv;charset=utf-8');
-    notify('CSV exportado.', 'success');
+    notify('CSV completo exportado.', 'success');
   }
   function downloadFile(content, filename, type){
     const blob = new Blob([content], {type});

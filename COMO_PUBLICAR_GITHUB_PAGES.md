@@ -6,4 +6,4 @@
 4. Escolha a branch principal e a pasta raiz.
 5. Aguarde o GitHub gerar o link.
 
-Depois de publicar, abra o app e confira se no Perfil aparece `v13.01`.
+Depois de publicar, abra o app e confira se no Perfil aparece `v13.03`.

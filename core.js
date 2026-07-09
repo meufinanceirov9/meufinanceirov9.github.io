@@ -1,8 +1,8 @@
 (function(global){
   'use strict';
 
-  const APP_VERSION = 'v13.01';
-  const BUILD_ID = '2026-07-08-v13-01-mascara-valores-padronizada';
+  const APP_VERSION = 'v13.03';
+  const BUILD_ID = '2026-07-09-v13-03-revisao-funcionamento-local';
   const STORAGE_KEY = 'financeiro-crm-v13-local';
   const BACKUP_PREFIX = 'backup-financeiro-crm';
 
@@ -430,7 +430,11 @@
     s.movements.forEach(m => {
       if(!isValidDate(m.data)) problems.push(`Movimento ${m.id} sem data válida.`);
       if(['entrada','saida','rendimento','cartao','pagamento_cartao','transferencia'].includes(m.type) && m.value <= 0) problems.push(`Movimento ${m.id} sem valor positivo.`);
-      if(m.type === 'ifood_dinheiro' && m.received <= 0) problems.push(`iFood ${m.id} sem valor recebido.`);
+      if(m.type === 'transferencia' && m.fromAccount === m.toAccount) problems.push(`Transferência ${m.id} com origem e destino iguais.`);
+      if(m.type === 'ifood_dinheiro'){
+        if(m.received <= 0) problems.push(`iFood ${m.id} sem valor recebido.`);
+        if(m.change > m.received) problems.push(`iFood ${m.id} com troco maior que o recebido.`);
+      }
     });
     return {ok: problems.length === 0, problems};
   }

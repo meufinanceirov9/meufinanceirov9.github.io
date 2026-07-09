@@ -1,31 +1,33 @@
-# Financeiro CRM v13.01
+# Financeiro CRM v13.03
 
-**Build:** `2026-07-08-v13-01-mascara-valores-padronizada`
+**Build:** `2026-07-09-v13-03-revisao-funcionamento-local`
 
-Esta versão mantém a reconstrução local estável da v13.00 e corrige a experiência de preenchimento dos campos monetários.
+Esta versão mantém a reconstrução local estável da v13.00, preserva a máscara monetária da v13.01 e o ícone padronizado da v13.02, mas faz uma revisão geral de funcionamento local antes de continuar evoluindo o app.
 
-## O que mudou na v13.01
+## O que mudou na v13.03
 
-- O visual/frontend da v13 foi mantido como padrão do app.
-- Todos os campos com valor monetário usam a mesma máscara visual.
-- Ao digitar, os centavos sobem de forma padronizada:
-  - `1` vira `0,01`
-  - `12` vira `0,12`
-  - `123` vira `1,23`
-  - `1234` vira `12,34`
-  - `123456` vira `1.234,56`
-- A máscara foi aplicada por delegação de evento, então também funciona em campos criados depois, como edição de histórico e modal da meta.
-- Ao focar em um campo de valor, o conteúdo é selecionado para facilitar substituir o valor inteiro.
-- Ao sair do campo, o valor é normalizado no formato brasileiro.
-- O parser interno continua aceitando `100000`, `100000,00` e `100.000,00` como R$ 100.000,00 em backups/importações/código.
+- O visual/frontend da v13 foi preservado como padrão oficial do app.
+- O modo **Ocultar saldos** ficou mais seguro: além dos valores em reais, o app também oculta porcentagens e barras que poderiam revelar indiretamente o patrimônio/meta.
+- O lançamento de **iFood em dinheiro** agora bloqueia troco maior que o valor recebido.
+- A validação estrutural também sinaliza transferências com origem e destino iguais.
+- O registro rápido de rendimento agora cria backup automático antes de salvar.
+- A exportação CSV ficou mais completa:
+  - inclui patrimônio bruto e líquido;
+  - inclui Futuro, Giro, Carteira, Banco, Investimentos, Fatura e Dívidas;
+  - inclui Rendimento Futuro e Rendimento Giro registrados na base;
+  - usa BOM UTF-8 para abrir melhor no Excel/planilhas.
+- Os testes automáticos foram ampliados com migração de backup antigo v13 e validações adicionais.
 
-## Base preservada da v13.00
+## Base preservada
 
-- Código separado em camadas:
-  - `core.js`: regras financeiras, cálculos, migração e validação.
-  - `app.js`: interface, formulários, eventos e localStorage.
-  - `styles.css`: visual.
-- Login/Supabase removidos da execução local.
+- v13.00: reconstrução local estável.
+- v13.01: máscara visual monetária padronizada em todos os campos.
+- v13.02: ícone da página/favicon padronizado.
+- v13.03: revisão de segurança local, privacidade, CSV e validação.
+
+## Regras importantes mantidas
+
+- Login/Supabase continuam fora da execução local.
 - Dashboard com meta e prazo editáveis.
 - Patrimônio completo como base real de cálculo.
 - Movimentos depois da base atualizam saldos vivos.
@@ -49,4 +51,4 @@ Esta versão mantém a reconstrução local estável da v13.00 e corrige a exper
 
 ## Próxima etapa recomendada
 
-Usar a v13.01 em testes locais e validar todos os campos de valor. Só depois pensar em `v13.10` com Supabase/sincronização.
+Usar a v13.03 em testes reais no GitHub Pages. Se o uso local continuar estável, a sincronização em nuvem pode entrar só depois, como `v13.10`.
