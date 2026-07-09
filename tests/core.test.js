@@ -88,4 +88,33 @@ const migrated = C.migrateState(exported);
 assert.strictEqual(migrated.settings.goal.target, 100000);
 assert.strictEqual(migrated.movements.length, 6);
 
-console.log('Todos os testes do core v13.01 passaram.');
+const invalidIfood = C.defaultState();
+invalidIfood.movements.push(C.normalizeMovement({id:'bad_ifood', type:'ifood_dinheiro', data:'2026-07-08', received:20, change:30}));
+assert.strictEqual(C.validateState(invalidIfood).ok, false, 'troco maior que recebido deve ser sinalizado');
+
+const invalidTransfer = C.defaultState();
+invalidTransfer.movements.push(C.normalizeMovement({id:'bad_transfer', type:'transferencia', data:'2026-07-08', fromAccount:'giro', toAccount:'giro', value:10}));
+assert.strictEqual(C.validateState(invalidTransfer).ok, false, 'transferência com mesma origem/destino deve ser sinalizada');
+
+const backupV13 = {data:{settings:{goal:{target:100000,due:'2027-12-31'}}, patrimonio:[{data:'2026-07-08',futuro:'14.362,91',giro:'529,47',carteira:'4,00',faturaAberta:'901,36'}], movements:[]}};
+const migratedBackup = C.migrateState(backupV13);
+assert.strictEqual(migratedBackup.settings.appVersion, 'v13.04');
+assert.strictEqual(migratedBackup.settings.goal.due, '2027-12-31');
+approx(C.calculateBalances(migratedBackup,{asOfDate:'2026-07-09'}).liquido, 13995.02, 'backup v13 antigo deve migrar preservando liquido');
+
+const snapshotYieldState = C.defaultState();
+snapshotYieldState.patrimonio.push(C.normalizeSnapshot({data:'2026-07-01', rendimentoFuturo:7.54, rendimentoGiro:0.26}));
+const snapshotYieldSummary = C.getMonthlySummary(snapshotYieldState, '2026-07-09');
+approx(snapshotYieldSummary.snapshotYield, 7.80, 'rendimento informado em patrimônio deve entrar no resumo do mês');
+approx(snapshotYieldSummary.yield, 7.80, 'yield mensal soma movimentos + rendimento informado nas bases');
+
+const deltaState = C.defaultState();
+deltaState.patrimonio.push(C.normalizeSnapshot({id:'p1',data:'2026-07-08',createdAt:'2026-07-08T10:00:00.000Z', futuro:100, giro:50, carteira:0, faturaAberta:0}));
+deltaState.patrimonio.push(C.normalizeSnapshot({id:'p2',data:'2026-07-09',createdAt:'2026-07-09T10:00:00.000Z', futuro:107.54, giro:50.26, carteira:0, faturaAberta:0}));
+const delta = C.snapshotDeltaDetails(deltaState);
+approx(delta.delta, 7.80, 'auditoria deve calcular variação entre bases');
+approx(delta.unexplained, 7.80, 'variação sem movimento deve ser sinalizada');
+assert.strictEqual(delta.accountDeltas.length, 2, 'auditoria deve listar contas que variaram');
+
+console.log('Todos os testes do core v13.04 passaram.');
+

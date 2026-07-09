@@ -1,64 +1,15 @@
-# Testes executados — Financeiro CRM v13.03
+# Testes v13.04
 
-## Testes automáticos de core
+Executados:
 
-Arquivo: `tests/core.test.js`
+- `node --check core.js`
+- `node --check app.js`
+- `node tests/core.test.js`
+- Migração do backup v13.03 real enviado pelo usuário.
+- Validação estrutural do backup: OK.
+- Cálculo do saldo vivo a partir do backup: patrimônio líquido R$ 14.072,82 após aplicar o lançamento de R$ 45,00 posterior à base de 09/07.
+- Auditoria entre últimas bases: diferença R$ 7,80, sem movimentos explicando, com variação em Futuro R$ 7,54 e Giro R$ 0,26.
+- Manifest, ícones e service worker atualizados para v13.04.
+- ZIP testado com integridade.
 
-Cobertura principal:
-
-- Parser de dinheiro brasileiro:
-  - `100000`
-  - `100000,00`
-  - `100.000,00`
-  - `R$ 100.000,99`
-- Máscara visual monetária padronizada:
-  - `1` → `0,01`
-  - `12` → `0,12`
-  - `123` → `1,23`
-  - `1234` → `12,34`
-  - `123456` → `1.234,56`
-- Cálculo de patrimônio bruto e líquido.
-- Compra no cartão aumentando fatura aberta.
-- Pagamento do cartão sem alterar patrimônio líquido indevidamente.
-- iFood em dinheiro: carteira aumenta e Giro diminui pelo troco.
-- Rendimento separado de faturamento.
-- Alteração de prazo da meta alterando ritmo mensal.
-- Validação estrutural do estado.
-- Bloqueio estrutural de iFood com troco maior que recebido.
-- Bloqueio estrutural de transferência com origem/destino iguais.
-- Migração de backup embrulhado em `{ data: ... }`.
-- Migração de backup v13 antigo preservando objetivo e patrimônio líquido.
-
-## Testes manuais recomendados no navegador
-
-1. Abrir o app.
-2. Registrar patrimônio completo zerado ou com valores fictícios.
-3. Conferir campos de valor: digitar `123456` e confirmar que aparece `1.234,56`.
-4. Clicar no valor da meta no Dashboard e digitar `10000000` ou colar `100.000,00` para R$ 100.000,00.
-5. Clicar na data do prazo e alterar um mês antes.
-6. Confirmar que o ritmo mensal aumenta.
-7. Registrar uma entrada.
-8. Registrar uma saída.
-9. Registrar uma compra no cartão.
-10. Registrar pagamento do cartão.
-11. Registrar iFood em dinheiro com recebido e troco.
-12. Registrar rendimento da Caixinha Futuro.
-13. Abrir Histórico.
-14. Editar um lançamento.
-15. Excluir um lançamento.
-16. Exportar backup JSON.
-17. Importar backup JSON.
-18. Fechar e abrir o navegador e confirmar que os dados locais continuam.
-
-## Observação
-
-A linha v13 local não testa login porque login/nuvem foi intencionalmente desativado nesta etapa.
-
-
-## Verificação v13.03
-
-- Privacidade do botão Ocultar saldos revisada.
-- CSV completo revisado para exportar componentes do patrimônio.
-- Validação do iFood em dinheiro revisada.
-- Testes automáticos ampliados para backup antigo e erros estruturais.
-- Versão/cache atualizados para `v=1303`.
+Teste visual final ainda deve ser feito no navegador publicado.

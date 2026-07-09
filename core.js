@@ -1,8 +1,8 @@
 (function(global){
   'use strict';
 
-  const APP_VERSION = 'v13.03';
-  const BUILD_ID = '2026-07-09-v13-03-revisao-funcionamento-local';
+  const APP_VERSION = 'v13.04';
+  const BUILD_ID = '2026-07-09-v13-04-backup-auditoria-cache-icone';
   const STORAGE_KEY = 'financeiro-crm-v13-local';
   const BACKUP_PREFIX = 'backup-financeiro-crm';
 
@@ -387,16 +387,21 @@
     const items = (state && Array.isArray(state.movements) ? state.movements : [])
       .map(normalizeMovement)
       .filter(x => String(x.data || '').startsWith(endPrefix));
-    const summary = {month:start, income:0, expense:0, yield:0, card:0, ifoodNet:0, transfers:0, count:items.length};
+    const snapshotYield = (state && Array.isArray(state.patrimonio) ? state.patrimonio : [])
+      .map(normalizeSnapshot)
+      .filter(p => String(p.data || '').startsWith(endPrefix))
+      .reduce((sum,p) => round2(sum + p.rendimentoFuturo + p.rendimentoGiro), 0);
+    const summary = {month:start, income:0, expense:0, yield:0, manualYield:0, snapshotYield, card:0, ifoodNet:0, transfers:0, count:items.length};
     items.forEach(x => {
       const impact = movementImpact(x);
       summary.income = round2(summary.income + impact.income);
       summary.expense = round2(summary.expense + impact.expense);
-      summary.yield = round2(summary.yield + impact.yield);
+      summary.manualYield = round2(summary.manualYield + impact.yield);
       if(x.type === 'cartao') summary.card = round2(summary.card + x.value);
       if(x.type === 'ifood_dinheiro') summary.ifoodNet = round2(summary.ifoodNet + impact.income);
       if(x.type === 'transferencia') summary.transfers += 1;
     });
+    summary.yield = round2(summary.manualYield + snapshotYield);
     summary.netWork = round2(summary.income - summary.expense);
     summary.netWithYield = round2(summary.netWork + summary.yield);
     return summary;
@@ -416,6 +421,34 @@
     const explained = round2(movements.reduce((sum,m)=>sum+movementImpact(m).net,0));
     const unexplained = round2(delta - explained);
     return {previous, current, delta, explained, unexplained, movements};
+  }
+
+  function snapshotDeltaDetails(state){
+    const list = (state && Array.isArray(state.patrimonio) ? state.patrimonio : []).map(normalizeSnapshot).sort(sortDesc);
+    if(list.length < 2) return null;
+    const current = list[0];
+    const previous = list[1];
+    const prev = snapshotAssets(previous);
+    const curr = snapshotAssets(current);
+    const diff = explainSnapshotDifference(state);
+    const accountDeltas = ASSET_ACCOUNTS.map(k => ({
+      account: k,
+      label: ACCOUNT_LABELS[k],
+      delta: round2((curr.assets[k] || 0) - (prev.assets[k] || 0))
+    })).filter(x => Math.abs(x.delta) >= 0.01);
+    return {
+      previous, current,
+      delta: diff ? diff.delta : round2(curr.liquido - prev.liquido),
+      explained: diff ? diff.explained : 0,
+      unexplained: diff ? diff.unexplained : round2(curr.liquido - prev.liquido),
+      movements: diff ? diff.movements : [],
+      accountDeltas,
+      faturaDelta: round2(curr.faturaAberta - prev.faturaAberta),
+      outrasDividasDelta: round2(curr.outrasDividas - prev.outrasDividas),
+      snapshotYield: round2(current.rendimentoFuturo + current.rendimentoGiro),
+      previousLiquid: prev.liquido,
+      currentLiquid: curr.liquido
+    };
   }
 
   function validateState(state){
@@ -447,7 +480,7 @@
     parseCurrencyBR, formatCurrencyBR, currencyInput, currencyInputFromCentsDigits, normalizeCurrencyInputDisplay,
     defaultState, migrateState, normalizeGoal, normalizeSnapshot, normalizeMovement,
     sortByDateThenCreated, sortDesc, snapshotAssets, getLatestSnapshot, calculateBalances,
-    movementImpact, calculateGoal, getMonthlySummary, explainSnapshotDifference, validateState,
+    movementImpact, calculateGoal, getMonthlySummary, explainSnapshotDifference, snapshotDeltaDetails, validateState,
     defaultMovementDescription
   };
 

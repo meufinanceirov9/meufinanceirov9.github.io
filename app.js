@@ -63,6 +63,32 @@
     return privateMoney(x.value);
   }
   function accountTitle(key){ return C.ACCOUNT_LABELS[key] || key; }
+  function setRuntimeIcon(){
+    const href = `favicon-v13-04.png?v=1304-${encodeURIComponent(C.BUILD_ID)}`;
+    let link = document.querySelector('link[data-runtime-favicon]') || document.querySelector('link[rel="icon"]');
+    if(!link){ link = document.createElement('link'); document.head.appendChild(link); }
+    link.setAttribute('rel','icon');
+    link.setAttribute('type','image/png');
+    link.setAttribute('sizes','192x192');
+    link.setAttribute('href', href);
+    link.setAttribute('data-runtime-favicon','true');
+  }
+  async function refreshAppCache(){
+    backupBefore('antes-atualizar-cache');
+    notify('Limpando cache do app e recarregando...', 'info');
+    try{
+      if('caches' in window){
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(k => k.startsWith('financeiro-crm')).map(k => caches.delete(k)));
+      }
+      if('serviceWorker' in navigator){
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+    }catch(err){ console.warn('Falha ao limpar cache automaticamente.', err); }
+    const cleanPath = window.location.pathname || '/';
+    window.location.replace(`${cleanPath}?v=1304-${Date.now()}`);
+  }
 
   function render(){
     const root = $('#app');
@@ -153,12 +179,28 @@
           <div class="logic-note"><b>Regra:</b> rendimento aumenta patrimônio, mas não entra como faturamento de trabalho.</div>
         </section>
       </div>
+      ${renderBalanceAudit(balances)}
       <div class="grid two">
         <section class="card"><div class="card-title"><div><span class="eyebrow">Composição</span><h2>Onde está o patrimônio</h2></div><button class="ghost-btn compact" data-action="quickPatrimonio">Atualizar base</button></div>${composition}<div class="debt-line"><span>Fatura aberta</span><b>${privateMoney(balances.faturaAberta)}</b></div><div class="debt-line"><span>Outras dívidas</span><b>${privateMoney(balances.outrasDividas)}</b></div></section>
         <section class="card"><div class="card-title"><div><span class="eyebrow">Últimos registros</span><h2>Histórico recente</h2></div><button class="ghost-btn compact" data-view="historico">Ver tudo</button></div>${renderRecentHistory()}</section>
       </div>
       ${state.settings.devMode ? renderDevPanel() : ''}
     `;
+  }
+  function renderBalanceAudit(balances){
+    const details = C.snapshotDeltaDetails(state);
+    if(!details) return '';
+    const hasUnexplained = Math.abs(details.unexplained) >= 0.01;
+    const hasPostSnapshotMovements = balances.applied && balances.applied.length > 0;
+    if(!hasUnexplained && !hasPostSnapshotMovements) return '';
+    const deltas = details.accountDeltas.length
+      ? details.accountDeltas.map(x => `${escapeHtml(x.label)} ${x.delta>=0?'+':''}${privateMoney(x.delta)}`).join(' • ')
+      : 'Sem variação por conta.';
+    const movementText = hasPostSnapshotMovements
+      ? `${balances.applied.length} lançamento(s) depois da última base já estão sendo somados ao saldo vivo.`
+      : 'Nenhum lançamento depois da última base.';
+    const tone = hasUnexplained ? 'warn' : 'good';
+    return `<section class="card audit-card"><div class="card-title"><div><span class="eyebrow">Conferência</span><h2>Patrimônio auditado</h2><p>O app compara a última base com a anterior para separar base, movimentos e diferenças não classificadas.</p></div><span class="pill ${tone}">${hasUnexplained?'Revisar':'OK'}</span></div><div class="mini-stats"><div><span>Variação entre bases</span><b>${privateMoney(details.delta)}</b></div><div><span>Explicado por lançamentos</span><b>${privateMoney(details.explained)}</b></div><div><span>Sem classificação</span><b>${privateMoney(details.unexplained)}</b></div><div><span>Movimentos pós-base</span><b>${state.settings.hideBalances?'•••':(balances.applied||[]).length}</b></div></div><div class="logic-note ${tone}"><b>Leitura:</b> ${deltas}. ${movementText} ${hasUnexplained?'Se essa diferença for CDI/rendimento, registre em Rendimentos ou preencha os campos de rendimento na base do dia para relatórios mais fiéis.':''}</div></section>`;
   }
   function renderRecentHistory(){
     const items = combinedHistory().slice(0,6);
@@ -266,7 +308,7 @@
 
   function renderPerfil(){
     const lastBackup = state.settings.lastBackupAt ? new Date(state.settings.lastBackupAt).toLocaleString('pt-BR') : 'Nunca';
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section><section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
+    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Atualização</span><h2>Cache e ícone</h2><p>Use se o navegador continuar mostrando versão ou ícone antigo depois de publicar.</p></div><span class="pill">v13.04</span></div><div class="quick-row stack"><button class="ghost-btn" data-action="refreshApp">Atualizar app e limpar cache</button></div><div class="logic-note"><b>Seguro:</b> seus dados ficam no backup/localStorage. Mesmo assim, baixe um backup antes se estiver em dúvida.</div></section><section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
   }
 
   function openModal(html){
@@ -442,6 +484,7 @@
     if(action === 'exportBackup') exportBackup();
     if(action === 'exportCSV') exportCSV();
     if(action === 'resetApp') resetApp();
+    if(action === 'refreshApp') refreshAppCache();
   });
   function applyMoneyMask(input){
     if(!input) return;
@@ -503,7 +546,12 @@
 
   window.addEventListener('load', ()=>{
     saveState();
+    setRuntimeIcon();
     render();
-    if('serviceWorker' in navigator){ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); }
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./service-worker.js?v=1304').then(reg => {
+        if(reg && reg.update) reg.update().catch(()=>{});
+      }).catch(()=>{});
+    }
   });
 })();

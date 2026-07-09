@@ -1,54 +1,29 @@
-# Financeiro CRM v13.03
+# Financeiro CRM v13.04
 
-**Build:** `2026-07-09-v13-03-revisao-funcionamento-local`
+Build: `2026-07-09-v13-04-backup-auditoria-cache-icone`
 
-Esta versão mantém a reconstrução local estável da v13.00, preserva a máscara monetária da v13.01 e o ícone padronizado da v13.02, mas faz uma revisão geral de funcionamento local antes de continuar evoluindo o app.
+Base visual preservada da linha v13. Esta versão mantém o modo local estável e melhora conferência, cache e favicon.
 
-## O que mudou na v13.03
+## Melhorias da v13.04
 
-- O visual/frontend da v13 foi preservado como padrão oficial do app.
-- O modo **Ocultar saldos** ficou mais seguro: além dos valores em reais, o app também oculta porcentagens e barras que poderiam revelar indiretamente o patrimônio/meta.
-- O lançamento de **iFood em dinheiro** agora bloqueia troco maior que o valor recebido.
-- A validação estrutural também sinaliza transferências com origem e destino iguais.
-- O registro rápido de rendimento agora cria backup automático antes de salvar.
-- A exportação CSV ficou mais completa:
-  - inclui patrimônio bruto e líquido;
-  - inclui Futuro, Giro, Carteira, Banco, Investimentos, Fatura e Dívidas;
-  - inclui Rendimento Futuro e Rendimento Giro registrados na base;
-  - usa BOM UTF-8 para abrir melhor no Excel/planilhas.
-- Os testes automáticos foram ampliados com migração de backup antigo v13 e validações adicionais.
+- Mantém o visual aprovado da v13 como identidade fixa.
+- Mantém a máscara monetária padronizada da v13.01.
+- Mantém o ícone visual da v13.02/v13.03, agora com nomes únicos de arquivo para driblar cache agressivo do navegador.
+- Adiciona botão em **Perfil > Atualização > Atualizar app e limpar cache**.
+- Service worker agora usa **network-first para navegação/HTML**, reduzindo chance de ficar preso em tela ou ícone antigo.
+- Dashboard ganhou card de **Conferência / Patrimônio auditado** quando houver diferença entre as duas últimas bases ou movimentos posteriores à base atual.
+- A auditoria mostra variação entre bases, parte explicada por movimentos e parte sem classificação.
+- O resumo mensal passa a considerar também rendimentos preenchidos nos campos de rendimento da base de patrimônio.
+- Testes ampliados para auditoria de variação entre patrimônios e rendimento informado em base.
 
-## Base preservada
+## Sobre o backup analisado
 
-- v13.00: reconstrução local estável.
-- v13.01: máscara visual monetária padronizada em todos os campos.
-- v13.02: ícone da página/favicon padronizado.
-- v13.03: revisão de segurança local, privacidade, CSV e validação.
+No backup de 09/07/2026 v13.03, a estrutura está válida. A diferença de R$ 7,80 entre os patrimônios de 08/07 e 09/07 aparece como sem classificação, causada por aumento de R$ 7,54 na Caixinha Futuro e R$ 0,26 na Caixinha Giro. Isso parece rendimento/variação de base, mas não foi registrado nos campos de rendimento. A v13.04 passa a avisar isso no Dashboard.
 
-## Regras importantes mantidas
+## Publicação
 
-- Login/Supabase continuam fora da execução local.
-- Dashboard com meta e prazo editáveis.
-- Patrimônio completo como base real de cálculo.
-- Movimentos depois da base atualizam saldos vivos.
-- Rendimento separado de faturamento.
-- iFood em dinheiro: carteira sobe pelo recebido e Giro desce pelo troco.
-- Backup JSON, importação de backup e exportação CSV.
-- Histórico com edição e exclusão.
+Suba todos os arquivos da pasta para a raiz do GitHub Pages. Depois de publicar, abra:
 
-## Arquivos importantes
+`https://SEU_USUARIO.github.io/?v=1304`
 
-- `index.html`
-- `core.js`
-- `app.js`
-- `styles.css`
-- `DOCUMENTO_MESTRE_FINANCEIRO_CRM.md`
-- `TESTES_v13.md`
-- `tests/core.test.js`
-- `manifest.webmanifest`
-- `service-worker.js`
-- `version.json`
-
-## Próxima etapa recomendada
-
-Usar a v13.03 em testes reais no GitHub Pages. Se o uso local continuar estável, a sincronização em nuvem pode entrar só depois, como `v13.10`.
+Se o navegador continuar mostrando ícone antigo, vá em Perfil e use **Atualizar app e limpar cache**.

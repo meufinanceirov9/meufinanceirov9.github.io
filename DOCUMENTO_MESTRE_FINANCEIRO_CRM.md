@@ -153,3 +153,13 @@ Campos principais:
 - Modo ocultar saldos não revela valores por porcentagem/barra.
 - iFood em dinheiro bloqueia troco maior que recebido.
 - Fechar e abrir mantém dados no localStorage.
+
+## Atualização v13.04 — auditoria, cache e ícone
+
+- O visual da linha v13 continua imutável como padrão aprovado.
+- Favicon/ícone de aba passa a usar arquivo versionado específico (`favicon-v13-04`) para evitar cache antigo do Chrome.
+- O app ganha uma rotina manual de atualização/limpeza de cache em Perfil.
+- A navegação HTML do service worker passa a usar network-first.
+- A auditoria entre bases deve identificar variações de patrimônio que não foram explicadas por movimentos.
+- Diferenças positivas sem movimentos podem indicar rendimento CDI ou ajuste de base; o app não deve classificar automaticamente como faturamento.
+- Rendimentos preenchidos nos campos da base diária devem entrar no resumo de rendimentos do mês.
