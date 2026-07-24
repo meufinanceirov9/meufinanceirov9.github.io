@@ -1,9 +1,9 @@
-# Documento Mestre — Financeiro CRM v13.03
+# Documento Mestre — Financeiro CRM v13.07
 
 ## Versão-base
 
-- Versão: **v13.03**
-- Build: **2026-07-09-v13-03-revisao-funcionamento-local**
+- Versão: **v13.07**
+- Build: **2026-07-24-v13-07-entregas-e-navegacao-movel**
 - Estratégia: reconstrução técnica local estável, preservando o visual v13 como padrão do app.
 - Nuvem/login: **bloqueados nesta versão**. O app funciona sem Supabase e sem chave externa.
 - Dados reais: versão iniciada como app zerado, conforme autorização do usuário.
@@ -46,6 +46,7 @@ Controlar o patrimônio pessoal, a evolução até uma meta financeira e os movi
 - data
 - createdAt
 - updatedAt
+- capturedAt
 - futuro
 - giro
 - carteira
@@ -78,6 +79,7 @@ Campos principais:
 - updatedAt
 - description
 - category
+- competenceDate
 - account
 - fromAccount
 - toAccount
@@ -126,6 +128,10 @@ Campos principais:
 - v13.01: máscara de valores monetários padronizada, preservando visual v13.
 - v13.02: ícone da página/favicon padronizado com o visual v13 do app.
 - v13.03: revisão de funcionamento local, privacidade do modo ocultar saldos, validações extras e CSV completo.
+- v13.04: auditoria entre bases, cache e ícones versionados.
+- v13.05: rendimento automático assistido das caixinhas.
+- v13.06: corte correto da base diária, deduplicação, rendimentos separados e recuperação automática.
+- v13.07: semana de entregas, data de competência, atalhos, filtros e navegação móvel com quatro abas.
 - v13.10: futura sincronização em nuvem, se a base local estiver estável.
 - v14.00: apenas para mudança grande de produto/arquitetura.
 
@@ -185,3 +191,27 @@ Exemplo de referência:
 - Nova base: Futuro R$ 14.370,45 e Giro R$ 574,73.
 - Movimento lançado entre bases: entrada de R$ 45,00 no Giro.
 - Rendimento sugerido: Futuro R$ 7,54; Giro R$ 0,26; total R$ 7,80.
+
+## Atualização v13.06 — consistência e segurança dos dados
+
+1. Cada base possui `capturedAt`, que representa o horário em que aqueles saldos reais foram conferidos.
+2. Ao atualizar a base do mesmo dia, o corte avança e impede que lançamentos já refletidos nos saldos sejam somados de novo.
+3. Backups antigos com várias bases na mesma data são normalizados para uma base, conservando a captura mais recente.
+4. Lançamentos retroativos de dias intermediários explicam a variação entre bases mesmo quando foram digitados depois.
+5. Rendimento informado na base deixa de aparecer como diferença pendente no Dashboard.
+6. Futuro e Giro possuem totais mensais próprios e histórico com valores automáticos e manuais.
+7. Antes de alterações importantes, o app guarda até dez pontos locais de recuperação.
+8. A importação bloqueia JSON sem estrutura reconhecida, valida os dados e pede confirmação com a quantidade de registros.
+
+## Atualização v13.07 — entregas e navegação móvel
+
+1. A semana de entregas vai de segunda a domingo.
+2. `data` representa quando o dinheiro efetivamente entrou e continua sendo usada nos saldos.
+3. `competenceDate` é opcional e representa a semana em que o trabalho foi realizado.
+4. Entradas com categoria Entrega e registros de iFood em dinheiro alimentam o resumo semanal.
+5. O iFood em dinheiro considera como faturamento líquido `recebido - troco`.
+6. O Dashboard separa entrega via depósito/Pix e em espécie.
+7. O formulário possui atalhos para as fontes de renda mais usadas.
+8. No celular, Início, Registrar, Histórico e Perfil ficam fixos na barra inferior.
+9. Rendimentos permanece acessível pelo menu superior, evitando excesso de abas na barra principal.
+10. O Histórico pode ser filtrado por busca, mês e tipo sem alterar ou excluir dados.

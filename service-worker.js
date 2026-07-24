@@ -1,27 +1,27 @@
-const CACHE_NAME = 'financeiro-crm-v13-05-rendimento-automatico-caixinhas';
-const FALLBACK_HTML = './index.html?v=1305';
+const CACHE_NAME = 'financeiro-crm-v13-07-entregas-e-navegacao-movel';
+const FALLBACK_HTML = './index.html?v=1307';
 const ASSETS = [
   FALLBACK_HTML,
-  './styles.css?v=1305',
-  './core.js?v=1305',
-  './app.js?v=1305',
-  './manifest.webmanifest?v=1305',
+  './styles.css?v=1307',
+  './core.js?v=1307',
+  './app.js?v=1307',
+  './manifest.webmanifest?v=1307',
   './manifest.webmanifest',
   './version.json',
-  './favicon-v13-05.png?v=1305',
-  './favicon-v13-05.png',
-  './favicon-v13-05.ico?v=1305',
-  './favicon-v13-05.ico',
-  './favicon.png?v=1305',
+  './favicon-v13-07.png?v=1307',
+  './favicon-v13-07.png',
+  './favicon-v13-07.ico?v=1307',
+  './favicon-v13-07.ico',
+  './favicon.png?v=1307',
   './favicon.png',
-  './favicon.ico?v=1305',
+  './favicon.ico?v=1307',
   './favicon.ico',
-  './icon-v13-05-180.png?v=1305',
-  './icon-v13-05-180.png',
-  './icon-v13-05-192.png?v=1305',
-  './icon-v13-05-192.png',
-  './icon-v13-05-512.png?v=1305',
-  './icon-v13-05-512.png'
+  './icon-v13-07-180.png?v=1307',
+  './icon-v13-07-180.png',
+  './icon-v13-07-192.png?v=1307',
+  './icon-v13-07-192.png',
+  './icon-v13-07-512.png?v=1307',
+  './icon-v13-07-512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -58,6 +58,6 @@ self.addEventListener('fetch', event => {
       const copy = response.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(request, copy)).catch(()=>{});
       return response;
-    }).catch(() => caches.match(FALLBACK_HTML)))
+    }))
   );
 });

@@ -1,8 +1,8 @@
 (function(global){
   'use strict';
 
-  const APP_VERSION = 'v13.05';
-  const BUILD_ID = '2026-07-09-v13-05-rendimento-automatico-caixinhas';
+  const APP_VERSION = 'v13.07';
+  const BUILD_ID = '2026-07-24-v13-07-entregas-e-navegacao-movel';
   const STORAGE_KEY = 'financeiro-crm-v13-local';
   const BACKUP_PREFIX = 'backup-financeiro-crm';
 
@@ -29,6 +29,22 @@
     const d = parseISODate(dateISO || todayISO());
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
   }
+  function dateToISO(date){
+    const d = date instanceof Date && !Number.isNaN(date.getTime()) ? date : parseISODate(todayISO());
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function addDaysISO(dateISO, amount){
+    const d = parseISODate(dateISO || todayISO());
+    d.setDate(d.getDate() + safeNumber(amount));
+    return dateToISO(d);
+  }
+  function startOfWeekISO(dateISO){
+    const d = parseISODate(dateISO || todayISO());
+    const daysSinceMonday = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - daysSinceMonday);
+    return dateToISO(d);
+  }
+  function endOfWeekISO(dateISO){ return addDaysISO(startOfWeekISO(dateISO), 6); }
   function id(prefix){ return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; }
   function safeNumber(value){
     const n = Number(value);
@@ -36,6 +52,15 @@
   }
   function round2(value){ return Math.round((safeNumber(value) + Number.EPSILON) * 100) / 100; }
   function clamp(n,min,max){ return Math.min(max, Math.max(min, n)); }
+
+  function timestampMs(value){
+    const time = Date.parse(String(value || ''));
+    return Number.isFinite(time) ? time : 0;
+  }
+  function normalizeTimestamp(value, fallback){
+    const time = timestampMs(value) || timestampMs(fallback) || Date.now();
+    return new Date(time).toISOString();
+  }
 
   function parseISODate(value){
     if(!isValidDate(value)) return new Date(todayISO() + 'T00:00:00');
@@ -169,11 +194,15 @@
 
   function normalizeSnapshot(item){
     const p = item || {};
+    const createdAt = normalizeTimestamp(p.createdAt, nowISO());
+    const updatedAt = normalizeTimestamp(p.updatedAt, createdAt);
+    const capturedAt = normalizeTimestamp(p.capturedAt || p.balanceCutoffAt, p.updatedAt || createdAt);
     return {
       id: p.id || id('pat'),
       data: isValidDate(p.data) ? p.data : todayISO(),
-      createdAt: p.createdAt || nowISO(),
-      updatedAt: p.updatedAt || p.createdAt || nowISO(),
+      createdAt,
+      updatedAt,
+      capturedAt,
       futuro: parseCurrencyBR(p.futuro),
       giro: parseCurrencyBR(p.giro),
       carteira: parseCurrencyBR(p.carteira),
@@ -193,14 +222,17 @@
     const account = ACCOUNT_LABELS[m.account] ? m.account : 'banco';
     const fromAccount = ACCOUNT_LABELS[m.fromAccount] ? m.fromAccount : 'giro';
     const toAccount = ACCOUNT_LABELS[m.toAccount] ? m.toAccount : 'carteira';
+    const createdAt = normalizeTimestamp(m.createdAt, nowISO());
+    const competenceDate = m.competenceDate || m.referenceDate || m.dataReferencia || m.dataTrabalho;
     return {
       id: m.id || id('mov'),
       type,
       data: isValidDate(m.data) ? m.data : todayISO(),
-      createdAt: m.createdAt || nowISO(),
-      updatedAt: m.updatedAt || m.createdAt || nowISO(),
+      createdAt,
+      updatedAt: normalizeTimestamp(m.updatedAt, createdAt),
       description: String(m.description || defaultMovementDescription(type)),
       category: String(m.category || ''),
+      competenceDate: isValidDate(competenceDate) ? String(competenceDate) : '',
       account,
       fromAccount,
       toAccount,
@@ -237,7 +269,7 @@
     base.settings.cardDueDay = clamp(parseInt(base.settings.cardDueDay,10)||11,1,28);
 
     const snapshots = Array.isArray(data.patrimonio) ? data.patrimonio : [];
-    base.patrimonio = snapshots.map(normalizeSnapshot).sort(sortByDateThenCreated);
+    base.patrimonio = dedupeSnapshotsByDate(snapshots.map(normalizeSnapshot));
 
     let movements = Array.isArray(data.movements) ? data.movements : [];
     if(!movements.length && Array.isArray(data.lancamentos)){
@@ -279,12 +311,29 @@
   function sortByDateThenCreated(a,b){
     const dateCmp = String(a.data||'').localeCompare(String(b.data||''));
     if(dateCmp) return dateCmp;
-    return String(a.createdAt||'').localeCompare(String(b.createdAt||''));
+    return recordTimestamp(a).localeCompare(recordTimestamp(b));
   }
   function sortDesc(a,b){
     const dateCmp = String(b.data||'').localeCompare(String(a.data||''));
     if(dateCmp) return dateCmp;
-    return String(b.createdAt||'').localeCompare(String(a.createdAt||''));
+    return recordTimestamp(b).localeCompare(recordTimestamp(a));
+  }
+  function recordTimestamp(item){
+    return String((item && (item.capturedAt || item.createdAt || item.updatedAt)) || '');
+  }
+  function snapshotCapturedAt(snapshot){
+    const p = snapshot || {};
+    return normalizeTimestamp(p.capturedAt || p.balanceCutoffAt, p.updatedAt || p.createdAt || nowISO());
+  }
+  function dedupeSnapshotsByDate(snapshots){
+    const latestByDate = new Map();
+    (Array.isArray(snapshots) ? snapshots : []).map(normalizeSnapshot).forEach(p => {
+      const current = latestByDate.get(p.data);
+      if(!current || timestampMs(snapshotCapturedAt(p)) >= timestampMs(snapshotCapturedAt(current))){
+        latestByDate.set(p.data, p);
+      }
+    });
+    return Array.from(latestByDate.values()).sort(sortByDateThenCreated);
   }
 
   function snapshotAssets(snapshot){
@@ -311,7 +360,7 @@
     if(!snapshot) return true;
     if(movement.data < snapshot.data) return false;
     if(movement.data > snapshot.data) return true;
-    return String(movement.createdAt || '') > String(snapshot.createdAt || '');
+    return timestampMs(movement.createdAt) > timestampMs(snapshotCapturedAt(snapshot));
   }
 
   function calculateBalances(state, options){
@@ -408,32 +457,35 @@
     return acc;
   }
 
-  function movementCreatedBetween(movement, previous, currentCreatedAt){
-    const created = String(movement.createdAt || '');
-    if(previous && created && String(previous.createdAt || '') && created <= String(previous.createdAt || '')) return false;
-    if(currentCreatedAt && created && created > String(currentCreatedAt)) return false;
-    return true;
-  }
-
   function movementsBetweenSnapshots(state, previous, draftSnapshot){
     if(!previous || !draftSnapshot) return [];
     const current = normalizeSnapshot(draftSnapshot);
-    const currentCreatedAt = current.createdAt || nowISO();
+    const previousCutoff = timestampMs(snapshotCapturedAt(previous));
+    const currentCutoff = timestampMs(snapshotCapturedAt(current));
     return (state && Array.isArray(state.movements) ? state.movements : [])
       .map(normalizeMovement)
       .filter(m => m.data >= previous.data && m.data <= current.data)
-      .filter(m => movementCreatedBetween(m, previous, currentCreatedAt))
+      .filter(m => {
+        const recordedAt = timestampMs(m.createdAt);
+        if(previous.data === current.data) return recordedAt > previousCutoff && recordedAt <= currentCutoff;
+        if(m.data === previous.data && recordedAt <= previousCutoff) return false;
+        if(m.data === current.data && recordedAt > currentCutoff) return false;
+        return true;
+      })
       .sort(sortByDateThenCreated);
   }
 
   function estimateSnapshotYields(state, draftSnapshot, options){
     const opts = options || {};
-    const current = normalizeSnapshot(Object.assign({}, draftSnapshot || {}, {createdAt: (draftSnapshot && draftSnapshot.createdAt) || opts.currentCreatedAt || nowISO()}));
+    const current = normalizeSnapshot(Object.assign({}, draftSnapshot || {}, {
+      createdAt: (draftSnapshot && draftSnapshot.createdAt) || nowISO(),
+      capturedAt: (draftSnapshot && draftSnapshot.capturedAt) || opts.currentCapturedAt || opts.currentCreatedAt || nowISO()
+    }));
     const excludeId = opts.excludeId || current.id || '';
     const previous = (state && Array.isArray(state.patrimonio) ? state.patrimonio : [])
       .map(normalizeSnapshot)
       .filter(p => p.id !== excludeId)
-      .filter(p => p.data <= current.data)
+      .filter(p => p.data < current.data)
       .sort(sortDesc)[0] || null;
 
     if(!previous){
@@ -509,6 +561,103 @@
     return summary;
   }
 
+  function getYieldSummary(state, monthISO){
+    const start = startOfMonthISO(monthISO || todayISO());
+    const prefix = start.slice(0,7);
+    const byAccount = {};
+    ASSET_ACCOUNTS.forEach(account => {
+      byAccount[account] = {account, label:ACCOUNT_LABELS[account], manual:0, snapshot:0, total:0};
+    });
+
+    (state && Array.isArray(state.patrimonio) ? state.patrimonio : [])
+      .map(normalizeSnapshot)
+      .filter(p => p.data.startsWith(prefix))
+      .forEach(p => {
+        byAccount.futuro.snapshot = round2(byAccount.futuro.snapshot + p.rendimentoFuturo);
+        byAccount.giro.snapshot = round2(byAccount.giro.snapshot + p.rendimentoGiro);
+      });
+
+    (state && Array.isArray(state.movements) ? state.movements : [])
+      .map(normalizeMovement)
+      .filter(m => m.type === 'rendimento' && m.data.startsWith(prefix))
+      .forEach(m => {
+        byAccount[m.account].manual = round2(byAccount[m.account].manual + m.value);
+      });
+
+    Object.values(byAccount).forEach(item => item.total = round2(item.manual + item.snapshot));
+    const manual = round2(Object.values(byAccount).reduce((sum,item)=>sum+item.manual,0));
+    const snapshot = round2(Object.values(byAccount).reduce((sum,item)=>sum+item.snapshot,0));
+    return {
+      month:start,
+      byAccount,
+      futuro:byAccount.futuro,
+      giro:byAccount.giro,
+      manual,
+      snapshot,
+      total:round2(manual + snapshot)
+    };
+  }
+
+  function normalizeSearchText(value){
+    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  }
+  function movementReferenceDate(movement){
+    const m = normalizeMovement(movement);
+    return isValidDate(m.competenceDate) ? m.competenceDate : m.data;
+  }
+  function isDeliveryMovement(movement){
+    const m = normalizeMovement(movement);
+    if(m.type === 'ifood_dinheiro') return true;
+    if(m.type !== 'entrada') return false;
+    const marker = normalizeSearchText(m.category || m.description);
+    return ['entrega','ifood','delivery','mercado livre','shopee','transportadora'].some(term => marker.includes(term));
+  }
+  function getDeliveryWeeklySummary(state, referenceDate){
+    const reference = isValidDate(referenceDate) ? referenceDate : todayISO();
+    const start = startOfWeekISO(reference);
+    const end = endOfWeekISO(reference);
+    const items = (state && Array.isArray(state.movements) ? state.movements : [])
+      .map(normalizeMovement)
+      .filter(isDeliveryMovement)
+      .filter(m => {
+        const date = movementReferenceDate(m);
+        return date >= start && date <= end;
+      })
+      .sort(sortByDateThenCreated);
+    const days = new Set();
+    const summary = {
+      reference,
+      start,
+      end,
+      payoutDate:addDaysISO(end, 3),
+      total:0,
+      deposited:0,
+      cash:0,
+      cashReceived:0,
+      change:0,
+      days:0,
+      averagePerDay:0,
+      count:items.length,
+      items
+    };
+    items.forEach(m => {
+      const income = movementImpact(m).income;
+      const date = movementReferenceDate(m);
+      days.add(date);
+      summary.total = round2(summary.total + income);
+      if(m.type === 'ifood_dinheiro'){
+        summary.cash = round2(summary.cash + income);
+        summary.cashReceived = round2(summary.cashReceived + m.received);
+        summary.change = round2(summary.change + m.change);
+      } else {
+        summary.deposited = round2(summary.deposited + income);
+      }
+    });
+    summary.days = days.size;
+    summary.averagePerDay = summary.days > 0 ? round2(summary.total / summary.days) : 0;
+    return summary;
+  }
+
   function explainSnapshotDifference(state){
     const list = (state && Array.isArray(state.patrimonio) ? state.patrimonio : []).map(normalizeSnapshot).sort(sortDesc);
     if(list.length < 2) return null;
@@ -517,9 +666,7 @@
     const previousLiquid = snapshotAssets(previous).liquido;
     const currentLiquid = snapshotAssets(current).liquido;
     const delta = round2(currentLiquid - previousLiquid);
-    const movements = (state.movements||[]).map(normalizeMovement)
-      .filter(m => m.data >= previous.data && m.data <= current.data)
-      .filter(m => String(m.createdAt||'') > String(previous.createdAt||'') && String(m.createdAt||'') <= String(current.createdAt||''));
+    const movements = movementsBetweenSnapshots(state, previous, current);
     const explained = round2(movements.reduce((sum,m)=>sum+movementImpact(m).net,0));
     const unexplained = round2(delta - explained);
     return {previous, current, delta, explained, unexplained, movements};
@@ -538,7 +685,7 @@
       label: ACCOUNT_LABELS[k],
       delta: round2((curr.assets[k] || 0) - (prev.assets[k] || 0))
     })).filter(x => Math.abs(x.delta) >= 0.01);
-    const yieldEstimate = estimateSnapshotYields(state, current, {excludeId: current.id, currentCreatedAt: current.createdAt});
+    const yieldEstimate = estimateSnapshotYields(state, current, {excludeId: current.id, currentCapturedAt: current.capturedAt});
     return {
       previous, current,
       delta: diff ? diff.delta : round2(curr.liquido - prev.liquido),
@@ -580,12 +727,14 @@
   const api = {
     APP_VERSION, BUILD_ID, STORAGE_KEY, BACKUP_PREFIX,
     ACCOUNT_LABELS, ASSET_ACCOUNTS, LIABILITY_ACCOUNTS,
-    nowISO, todayISO, startOfMonthISO, id, safeNumber, round2, clamp,
-    isValidDate, parseISODate, formatDateBR, daysBetween, monthsBetween,
+    nowISO, todayISO, startOfMonthISO, dateToISO, addDaysISO, startOfWeekISO, endOfWeekISO, id, safeNumber, round2, clamp,
+    timestampMs, normalizeTimestamp, isValidDate, parseISODate, formatDateBR, daysBetween, monthsBetween,
     parseCurrencyBR, formatCurrencyBR, currencyInput, currencyInputFromCentsDigits, normalizeCurrencyInputDisplay,
     defaultState, migrateState, normalizeGoal, normalizeSnapshot, normalizeMovement,
-    sortByDateThenCreated, sortDesc, snapshotAssets, getLatestSnapshot, calculateBalances,
-    movementImpact, accountImpact, estimateSnapshotYields, calculateGoal, getMonthlySummary, explainSnapshotDifference, snapshotDeltaDetails, validateState,
+    sortByDateThenCreated, sortDesc, snapshotCapturedAt, dedupeSnapshotsByDate, snapshotAssets, getLatestSnapshot, calculateBalances,
+    movementImpact, accountImpact, estimateSnapshotYields, calculateGoal, getMonthlySummary, getYieldSummary,
+    normalizeSearchText, movementReferenceDate, isDeliveryMovement, getDeliveryWeeklySummary,
+    explainSnapshotDifference, snapshotDeltaDetails, validateState,
     defaultMovementDescription
   };
 

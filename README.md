@@ -1,38 +1,40 @@
-# Financeiro CRM v13.05
+# Financeiro CRM v13.07
 
-Build: `2026-07-09-v13-05-rendimento-automatico-caixinhas`
+Build: `2026-07-24-v13-07-entregas-e-navegacao-movel`
 
-Versão local estável baseada na v13.04, mantendo o visual aprovado da linha v13 e adicionando ajuda automática para rendimento das caixinhas.
+Versão local estável baseada na v13.06. Preserva o padrão visual oficial da linha v13 e melhora a rotina de entregas, a navegação no celular e a localização de registros.
 
-## Melhorias da v13.05
+## Melhorias da v13.07
 
-- Mantém o frontend da v13 como padrão visual cravado.
-- Mantém máscara monetária padronizada da v13.01.
-- Mantém cache/ícone versionado da v13.04.
-- Adiciona cálculo assistido de rendimento por diferença diária:
-  - compara a base de patrimônio atual com a base anterior;
-  - desconta movimentos lançados entre as bases;
-  - sugere rendimento provável para Caixinha Futuro e Caixinha Giro;
-  - evita tratar uma entrada lançada, como entregas no Giro, como rendimento.
-- O formulário de patrimônio completo passa a mostrar uma caixa de “Ajuda do rendimento”.
-- Ao registrar nova base, os campos de rendimento Futuro/Giro são preenchidos com a sugestão quando houver diferença provável de CDI.
-- O Dashboard mostra “Provável rendimento” na auditoria entre bases.
-- Adiciona ação para aplicar o rendimento provável na última base caso ela ainda esteja sem rendimento informado.
-- Evita duplicar bases no mesmo dia: ao salvar uma nova base para uma data que já existe, o app atualiza a base daquele dia.
-- Ferramenta “Atualizar app e limpar cache” fica oculta no modo usuário e aparece apenas no modo desenvolvedor.
+- Adiciona o painel **Semana trabalhada** no Dashboard:
+  - semana de segunda a domingo;
+  - total de entregas;
+  - Pix/depósitos separados do dinheiro líquido;
+  - dias registrados e média diária;
+  - indicação da quarta-feira esperada para o repasse do iFood.
+- Separa a data em que o dinheiro entrou da data da semana trabalhada:
+  - `data` continua movimentando o saldo no dia real do recebimento;
+  - `competenceDate` organiza o valor na semana correta;
+  - um repasse recebido na quarta pode pertencer à semana encerrada no domingo anterior.
+- Adiciona o atalho **Registrar entrega** no Dashboard.
+- Adiciona atalhos no formulário para Entrega, iFood dinheiro, Salário, Barman e Extra.
+- Adiciona feedback tátil suave em celulares compatíveis.
+- Cria barra inferior móvel com quatro abas fixas: Início, Registrar, Histórico e Perfil.
+- Mantém Rendimentos e demais opções no menu lateral acessado pelo botão superior direito.
+- Coloca o logotipo RS no canto superior esquerdo do celular para abrir o Perfil.
+- Adiciona filtros no Histórico por texto, mês e tipo de lançamento.
+- Mostra categoria e semana de referência nos itens do Histórico.
+- Inclui `data_referencia_semana` na exportação CSV.
 
-## Regra importante
+## Regras preservadas
 
-Rendimento aumenta patrimônio, mas não entra como faturamento de trabalho. Entradas lançadas em Giro/Futuro são descontadas antes do cálculo de rendimento sugerido.
-
-Exemplo testado:
-
-- Futuro: R$ 14.362,91 → R$ 14.370,45 = R$ 7,54 sugerido como rendimento.
-- Giro: R$ 529,47 → R$ 574,73 com entrada lançada de R$ 45,00 = apenas R$ 0,26 sugerido como rendimento.
-- Total sugerido: R$ 7,80, sem confundir os R$ 45,00 de entregas com CDI.
+- Rendimento não entra no faturamento do trabalho.
+- Existe no máximo uma base real por dia.
+- Atualizar a base do mesmo dia não soma movimentos duas vezes.
+- Futuro e Giro continuam com rendimentos separados.
+- Os dez pontos automáticos de recuperação continuam ativos.
+- Dados v13.06 e backups anteriores migram automaticamente.
 
 ## Publicação
 
-Suba todos os arquivos desta pasta na raiz do GitHub Pages. Depois acesse:
-
-`https://SEU_USUARIO.github.io/?v=1305`
+Para o endereço atual do app, publique os arquivos extraídos no mesmo site da Netlify. Consulte `COMO_PUBLICAR_NETLIFY.md`.

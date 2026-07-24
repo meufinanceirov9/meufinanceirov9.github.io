@@ -7,6 +7,7 @@
   let state = loadState();
   let currentView = 'dashboard';
   let toastTimer = null;
+  const AUTO_BACKUP_LIMIT = 10;
 
   function loadState(){
     try{
@@ -22,10 +23,50 @@
     state.updatedAt = C.nowISO();
     state.settings.appVersion = C.APP_VERSION;
     state.settings.buildId = C.BUILD_ID;
-    localStorage.setItem(C.STORAGE_KEY, JSON.stringify(state));
+    try{
+      localStorage.setItem(C.STORAGE_KEY, JSON.stringify(state));
+      return true;
+    }catch(err){
+      console.error('Falha ao salvar dados locais.', err);
+      notify('Não foi possível salvar. Baixe um backup antes de continuar.', 'warn');
+      return false;
+    }
+  }
+  function getAutoBackups(){
+    const prefix = `${C.STORAGE_KEY}-backup-`;
+    const backups = [];
+    try{
+      for(let index=0; index<localStorage.length; index+=1){
+        const key = localStorage.key(index);
+        if(!key || !key.startsWith(prefix)) continue;
+        try{
+          const parsed = JSON.parse(localStorage.getItem(key));
+          const data = parsed && parsed.data && parsed.data.settings ? parsed.data : parsed;
+          if(!data || typeof data !== 'object' || !data.settings) continue;
+          const keyTime = Number(key.split('-').pop());
+          backups.push({
+            key,
+            label:String((parsed && parsed.label) || 'alteração'),
+            savedAt:(parsed && parsed.savedAt) || (Number.isFinite(keyTime) ? new Date(keyTime).toISOString() : ''),
+            data
+          });
+        }catch(_){ }
+      }
+    }catch(_){ }
+    return backups.sort((a,b)=>C.timestampMs(b.savedAt)-C.timestampMs(a.savedAt));
+  }
+  function pruneAutoBackups(){
+    getAutoBackups().slice(AUTO_BACKUP_LIMIT).forEach(item => {
+      try{ localStorage.removeItem(item.key); }catch(_){ }
+    });
   }
   function backupBefore(label){
-    try{ localStorage.setItem(`${C.STORAGE_KEY}-backup-${label}-${Date.now()}`, JSON.stringify(state)); }catch(_){ }
+    try{
+      const savedAt = C.nowISO();
+      const payload = {savedAt, label, appVersion:C.APP_VERSION, data:state};
+      localStorage.setItem(`${C.STORAGE_KEY}-backup-${label}-${Date.now()}`, JSON.stringify(payload));
+      pruneAutoBackups();
+    }catch(_){ }
   }
   function notify(message, type='info'){
     const el = $('#toast');
@@ -64,7 +105,7 @@
   }
   function accountTitle(key){ return C.ACCOUNT_LABELS[key] || key; }
   function setRuntimeIcon(){
-    const href = `favicon-v13-05.png?v=1305-${encodeURIComponent(C.BUILD_ID)}`;
+    const href = `favicon-v13-07.png?v=1307-${encodeURIComponent(C.BUILD_ID)}`;
     let link = document.querySelector('link[data-runtime-favicon]') || document.querySelector('link[rel="icon"]');
     if(!link){ link = document.createElement('link'); document.head.appendChild(link); }
     link.setAttribute('rel','icon');
@@ -87,7 +128,7 @@
       }
     }catch(err){ console.warn('Falha ao limpar cache automaticamente.', err); }
     const cleanPath = window.location.pathname || '/';
-    window.location.replace(`${cleanPath}?v=1305-${Date.now()}`);
+    window.location.replace(`${cleanPath}?v=1307-${Date.now()}`);
   }
 
   function render(){
@@ -96,7 +137,7 @@
     root.innerHTML = `
       <aside class="sidebar">
         <div class="brand-row">
-          <button class="brand-icon" data-action="toggleDev" title="Alternar modo usuário/desenvolvedor">${state.settings.devMode?'🛠️':'◆'}</button>
+          <button class="brand-icon" data-view="perfil" title="Abrir perfil">RS</button>
           <div><strong>Financeiro CRM</strong><small>${C.APP_VERSION} • modo local</small></div>
         </div>
         <nav class="nav-list">
@@ -113,21 +154,32 @@
       </aside>
       <main class="main">
         <header class="topbar">
-          <button class="mobile-menu" data-action="toggleMenu">☰</button>
-          <div><h1>${viewTitle()}</h1><p>${viewSubtitle()}</p></div>
+          <button class="mobile-brand" data-view="perfil" title="Abrir perfil">RS</button>
+          <div class="top-title"><h1>${escapeHtml(viewTitle())}</h1><p>${viewSubtitle()}</p></div>
           <div class="top-actions">
             <button class="ghost-btn" data-action="toggleBalances">${state.settings.hideBalances?'Mostrar':'Ocultar'} saldos</button>
             <button class="primary-btn compact" data-action="quickPatrimonio">+ Patrimônio</button>
           </div>
+          <button class="mobile-menu" data-action="toggleMenu" title="Abrir menu">☰</button>
         </header>
         <section class="content">${renderView()}</section>
       </main>
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        ${bottomNavItem('dashboard','⌂','Início')}
+        ${bottomNavItem('registrar','＋','Registrar')}
+        ${bottomNavItem('historico','≡','Histórico')}
+        ${bottomNavItem('perfil','○','Perfil')}
+      </nav>
       <div id="modal" class="modal" aria-hidden="true"></div>
       <div id="toast" class="toast"></div>
     `;
   }
   function navItem(view,label,icon){ return `<button class="nav-item ${currentView===view?'active':''}" data-view="${view}"><span>${icon}</span>${label}</button>`; }
-  function viewTitle(){ return ({dashboard:'Dashboard', registrar:'Registrar', historico:'Histórico', rendimentos:'Rendimentos', perfil:'Perfil e backups'})[currentView] || 'Dashboard'; }
+  function bottomNavItem(view,icon,label){ return `<button class="bottom-nav-item ${currentView===view?'active':''}" data-view="${view}"><span>${icon}</span><small>${label}</small></button>`; }
+  function viewTitle(){
+    if(currentView === 'dashboard' && state.settings.ownerName) return `Olá, ${state.settings.ownerName}`;
+    return ({dashboard:'Dashboard', registrar:'Registrar', historico:'Histórico', rendimentos:'Rendimentos', perfil:'Perfil e backups'})[currentView] || 'Dashboard';
+  }
   function viewSubtitle(){
     return ({
       dashboard:'Patrimônio, objetivo, progresso e ritmo necessário.',
@@ -149,6 +201,7 @@
     const balances = C.calculateBalances(state);
     const goal = C.calculateGoal(state);
     const month = C.getMonthlySummary(state);
+    const deliveryWeek = C.getDeliveryWeeklySummary(state);
     const progressWidth = privateBarWidth(goal.progress);
     const snapText = balances.snapshot ? `Base: ${C.formatDateBR(balances.snapshot.data)}` : 'Sem patrimônio base ainda';
     const dueText = goal.overdue ? 'Prazo vencido' : goal.dueToday ? 'Prazo hoje' : `${goal.days} dia(s) restantes`;
@@ -180,6 +233,7 @@
         </section>
       </div>
       ${renderBalanceAudit(balances)}
+      ${renderDeliveryWeek(deliveryWeek)}
       <div class="grid two">
         <section class="card"><div class="card-title"><div><span class="eyebrow">Composição</span><h2>Onde está o patrimônio</h2></div><button class="ghost-btn compact" data-action="quickPatrimonio">Atualizar base</button></div>${composition}<div class="debt-line"><span>Fatura aberta</span><b>${privateMoney(balances.faturaAberta)}</b></div><div class="debt-line"><span>Outras dívidas</span><b>${privateMoney(balances.outrasDividas)}</b></div></section>
         <section class="card"><div class="card-title"><div><span class="eyebrow">Últimos registros</span><h2>Histórico recente</h2></div><button class="ghost-btn compact" data-view="historico">Ver tudo</button></div>${renderRecentHistory()}</section>
@@ -187,14 +241,28 @@
       ${state.settings.devMode ? renderDevPanel() : ''}
     `;
   }
+  function renderDeliveryWeek(week){
+    const activityCount = state.settings.hideBalances ? '•••' : week.days;
+    const period = `${C.formatDateBR(week.start)} a ${C.formatDateBR(week.end)}`;
+    return `<section class="card delivery-card"><div class="card-title"><div><span class="eyebrow">Entregas • segunda a domingo</span><h2>Semana trabalhada</h2><p>${period}. Use a data de referência quando o repasse cair somente na quarta-feira.</p></div><button class="primary-btn compact" data-action="quickDelivery">+ Registrar entrega</button></div><div class="mini-stats"><div><span>Total da semana</span><b class="positive">${privateMoney(week.total)}</b></div><div><span>Via Pix/depósito</span><b>${privateMoney(week.deposited)}</b></div><div><span>Em dinheiro líquido</span><b>${privateMoney(week.cash)}</b></div><div><span>Dias com entrega</span><b>${activityCount}</b><small>Média ${privateMoney(week.averagePerDay)} / dia</small></div></div><div class="logic-note"><b>Fechamento:</b> esta semana termina em ${C.formatDateBR(week.end)}. Pela rotina do iFood, o repasse correspondente é esperado na quarta-feira, ${C.formatDateBR(week.payoutDate)}.</div></section>`;
+  }
   function renderBalanceAudit(balances){
     const details = C.snapshotDeltaDetails(state);
     if(!details) return '';
     const suggested = details.suggestedYield || {futuro:0,giro:0,total:0};
-    const hasSuggestedYield = suggested.total >= 0.01;
-    const hasUnexplained = Math.abs(details.unexplained) >= 0.01;
+    const recordedFuturo = C.round2(details.current.rendimentoFuturo || 0);
+    const recordedGiro = C.round2(details.current.rendimentoGiro || 0);
+    const recordedYield = C.round2(recordedFuturo + recordedGiro);
+    const pendingYield = {
+      futuro:C.round2(Math.max(0, suggested.futuro - recordedFuturo)),
+      giro:C.round2(Math.max(0, suggested.giro - recordedGiro))
+    };
+    pendingYield.total = C.round2(pendingYield.futuro + pendingYield.giro);
+    const unclassified = C.round2(details.unexplained - recordedYield);
+    const hasPendingYield = pendingYield.total >= 0.01;
+    const hasUnexplained = Math.abs(unclassified) >= 0.01;
     const hasPostSnapshotMovements = balances.applied && balances.applied.length > 0;
-    if(!hasUnexplained && !hasPostSnapshotMovements && !hasSuggestedYield) return '';
+    if(!hasUnexplained && !hasPostSnapshotMovements && !hasPendingYield) return '';
     const deltas = details.accountDeltas.length
       ? details.accountDeltas.map(x => `${escapeHtml(x.label)} ${x.delta>=0?'+':''}${privateMoney(x.delta)}`).join(' • ')
       : 'Sem variação por conta.';
@@ -202,10 +270,12 @@
       ? `${balances.applied.length} lançamento(s) depois da última base já estão sendo somados ao saldo vivo.`
       : 'Nenhum lançamento depois da última base.';
     const tone = hasUnexplained ? 'warn' : 'good';
-    const yieldText = hasSuggestedYield
-      ? `<div class="logic-note good"><b>Provável rendimento CDI detectado:</b> Futuro ${privateMoney(suggested.futuro)} • Giro ${privateMoney(suggested.giro)} • Total ${privateMoney(suggested.total)}. ${details.snapshotYield < 0.01 ? '<button class="link-btn" data-action="applyLatestYieldSuggestion">Aplicar na última base</button>' : 'A última base já tem rendimento informado.'}</div>`
-      : '';
-    return `<section class="card audit-card"><div class="card-title"><div><span class="eyebrow">Conferência</span><h2>Patrimônio auditado</h2><p>O app compara a última base com a anterior, desconta lançamentos e separa o que parece CDI/rendimento.</p></div><span class="pill ${tone}">${hasUnexplained?'Revisar':'OK'}</span></div><div class="mini-stats"><div><span>Variação entre bases</span><b>${privateMoney(details.delta)}</b></div><div><span>Explicado por lançamentos</span><b>${privateMoney(details.explained)}</b></div><div><span>Provável rendimento</span><b>${privateMoney(suggested.total)}</b></div><div><span>Movimentos pós-base</span><b>${state.settings.hideBalances?'•••':(balances.applied||[]).length}</b></div></div><div class="logic-note ${tone}"><b>Leitura:</b> ${deltas}. ${movementText} ${hasUnexplained?'Se o valor não for rendimento, lance a entrada/transferência correta antes de fechar a base.':''}</div>${yieldText}</section>`;
+    const yieldText = hasPendingYield
+      ? `<div class="logic-note good"><b>Provável CDI ainda não classificado:</b> Futuro ${privateMoney(pendingYield.futuro)} • Giro ${privateMoney(pendingYield.giro)} • Total ${privateMoney(pendingYield.total)}. <button class="link-btn" data-action="applyLatestYieldSuggestion">Aplicar na última base</button></div>`
+      : recordedYield >= 0.01
+        ? `<div class="logic-note good"><b>Rendimento já classificado:</b> Futuro ${privateMoney(recordedFuturo)} • Giro ${privateMoney(recordedGiro)}.</div>`
+        : '';
+    return `<section class="card audit-card"><div class="card-title"><div><span class="eyebrow">Conferência</span><h2>Patrimônio auditado</h2><p>O app compara a última base com a anterior, desconta lançamentos e separa o que parece CDI/rendimento.</p></div><span class="pill ${tone}">${hasUnexplained?'Revisar':'OK'}</span></div><div class="mini-stats"><div><span>Variação entre bases</span><b>${privateMoney(details.delta)}</b></div><div><span>Explicado por lançamentos</span><b>${privateMoney(details.explained)}</b></div><div><span>Rendimento classificado</span><b>${privateMoney(recordedYield)}</b></div><div><span>Ainda sem classificação</span><b>${privateMoney(unclassified)}</b></div></div><div class="logic-note ${tone}"><b>Leitura:</b> ${deltas}. ${movementText} ${hasUnexplained?'A diferença restante ainda precisa ser rendimento, entrada, saída ou ajuste de base.':''}</div>${yieldText}</section>`;
   }
   function renderRecentHistory(){
     const items = combinedHistory().slice(0,6);
@@ -232,6 +302,7 @@
     return C.normalizeSnapshot({
       id: (item && item.id) || values.id || C.id('pat_preview'),
       createdAt: (item && item.createdAt) || values.createdAt || C.nowISO(),
+      capturedAt: (item && C.snapshotCapturedAt(item)) || values.capturedAt || C.nowISO(),
       updatedAt: C.nowISO(),
       data: values.data || C.todayISO(),
       futuro: values.futuro, giro: values.giro, carteira: values.carteira, banco: values.banco, investimentos: values.investimentos,
@@ -241,9 +312,11 @@
     });
   }
   function draftFromPatrimonioForm(form){
+    const existing = form.dataset.id ? state.patrimonio.find(p=>p.id===form.dataset.id) : null;
     return buildPatrimonioDraftFromValues({
       id: form.dataset.id || '',
-      createdAt: form.dataset.id ? (state.patrimonio.find(p=>p.id===form.dataset.id)?.createdAt || C.nowISO()) : C.nowISO(),
+      createdAt: existing?.createdAt || C.nowISO(),
+      capturedAt: existing ? C.snapshotCapturedAt(existing) : C.nowISO(),
       data: fieldValue(form,'data'),
       futuro: moneyValue(form,'futuro'), giro: moneyValue(form,'giro'), carteira: moneyValue(form,'carteira'), banco: moneyValue(form,'banco'), investimentos: moneyValue(form,'investimentos'),
       faturaAberta: moneyValue(form,'faturaAberta'), outrasDividas: moneyValue(form,'outrasDividas'),
@@ -265,7 +338,7 @@
   }
   function applyYieldSuggestionToForm(form){
     const draft = draftFromPatrimonioForm(form);
-    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCreatedAt: draft.createdAt});
+    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCapturedAt: draft.capturedAt});
     if(!estimate || !estimate.ok) return notify('Ainda não existe base anterior para calcular rendimento.', 'warn');
     form.elements.rendimentoFuturo.value = C.currencyInput(estimate.suggested.futuro);
     form.elements.rendimentoGiro.value = C.currencyInput(estimate.suggested.giro);
@@ -277,15 +350,16 @@
     const box = $('[data-role="yield-suggestion"]', form);
     if(!box) return;
     const draft = draftFromPatrimonioForm(form);
-    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCreatedAt: draft.createdAt});
+    const estimate = C.estimateSnapshotYields(state, draft, {excludeId: form.dataset.id || draft.id, currentCapturedAt: draft.capturedAt});
     box.outerHTML = renderYieldAssist(estimate, draft);
   }
 
   function patrimonioForm(item){
     const balancesNow = C.calculateBalances(state);
-    const baseValues = item ? C.normalizeSnapshot(item) : Object.assign({data:C.todayISO(), createdAt:C.nowISO()}, balancesNow.assets, {faturaAberta:balancesNow.faturaAberta, outrasDividas:balancesNow.outrasDividas, rendimentoFuturo:0, rendimentoGiro:0, observacoes:''});
+    const captureNow = C.nowISO();
+    const baseValues = item ? C.normalizeSnapshot(item) : Object.assign({data:C.todayISO(), createdAt:captureNow, capturedAt:captureNow}, balancesNow.assets, {faturaAberta:balancesNow.faturaAberta, outrasDividas:balancesNow.outrasDividas, rendimentoFuturo:0, rendimentoGiro:0, observacoes:''});
     const preview = buildPatrimonioDraftFromValues(baseValues, item || null);
-    const estimate = C.estimateSnapshotYields(state, preview, {excludeId:item?item.id:preview.id, currentCreatedAt:preview.createdAt});
+    const estimate = C.estimateSnapshotYields(state, preview, {excludeId:item?item.id:preview.id, currentCapturedAt:preview.capturedAt});
     const p = C.normalizeSnapshot(Object.assign({}, baseValues, (!item && estimate && estimate.ok && estimate.suggested.total >= 0.01) ? {rendimentoFuturo:estimate.suggested.futuro, rendimentoGiro:estimate.suggested.giro} : {}));
     return `<form class="form" data-form="patrimonio" data-id="${item?escapeHtml(p.id):''}">
       <div class="form-grid">
@@ -305,16 +379,19 @@
       <div class="form-actions"><button class="primary-btn" type="submit">Salvar patrimônio</button>${item?'<button class="danger-btn" type="button" data-action="deleteSnapshot" data-id="'+escapeHtml(p.id)+'">Excluir</button>':''}</div>
     </form>`;
   }
-  function movementForm(item){
-    const m = item ? C.normalizeMovement(item) : {id:'', type:'entrada', data:C.todayISO(), description:'', category:'', account:'banco', fromAccount:'giro', toAccount:'carteira', value:0, received:0, change:0, notes:''};
-    return `<form class="form" data-form="movement" data-id="${item?escapeHtml(m.id):''}">
+  function movementForm(item, defaults){
+    const editing = !!item;
+    const m = item ? C.normalizeMovement(item) : Object.assign({id:'', type:'entrada', data:C.todayISO(), competenceDate:'', description:'', category:'', account:'banco', fromAccount:'giro', toAccount:'carteira', value:0, received:0, change:0, notes:''}, defaults || {});
+    const presets = editing ? '' : `<div class="movement-presets"><span>Atalhos:</span><button class="preset-btn" type="button" data-action="applyMovementPreset" data-preset="entrega">Entrega</button><button class="preset-btn" type="button" data-action="applyMovementPreset" data-preset="ifood_cash">iFood dinheiro</button><button class="preset-btn" type="button" data-action="applyMovementPreset" data-preset="salario">Salário</button><button class="preset-btn" type="button" data-action="applyMovementPreset" data-preset="barman">Barman</button><button class="preset-btn" type="button" data-action="applyMovementPreset" data-preset="extra">Extra</button></div>`;
+    return `<form class="form" data-form="movement" data-id="${editing?escapeHtml(m.id):''}">
+      ${presets}
       <div class="form-grid">
         <label>Tipo<select name="type" data-role="movement-type">
           ${['entrada','saida','transferencia','rendimento','ifood_dinheiro','cartao','pagamento_cartao'].map(t=>`<option value="${t}" ${m.type===t?'selected':''}>${movementTypeLabel(t)}</option>`).join('')}
         </select></label>
         <label>Data<input type="date" name="data" value="${m.data}" required></label>
         <label>Descrição<input name="description" value="${escapeHtml(m.description || '')}" placeholder="Ex.: salário, entrega, mercado"></label>
-        <label>Categoria<input name="category" value="${escapeHtml(m.category || '')}" placeholder="opcional"></label>
+        <label>Categoria<input name="category" value="${escapeHtml(m.category || '')}" placeholder="Ex.: Entrega, Salário, Barman"></label>
       </div>
       <div class="movement-dynamic">${movementDynamicFields(m)}</div>
       <label>Observação<input name="notes" value="${escapeHtml(m.notes || '')}" placeholder="opcional"></label>
@@ -335,14 +412,37 @@
     if(type === 'pagamento_cartao'){
       return `<div class="form-grid"><label>Conta usada para pagar<select name="account">${accountOptions(m.account)}</select></label><label>Valor pago<input class="money-field" name="value" inputmode="decimal" value="${C.currencyInput(m.value)}" required></label></div><div class="logic-note">Pagamento do cartão reduz uma conta e reduz a fatura. O líquido não deve mudar por isso.</div>`;
     }
+    if(type === 'entrada'){
+      const competenceDate = C.isValidDate(m.competenceDate) ? m.competenceDate : '';
+      return `<div class="form-grid"><label>Conta afetada<select name="account">${accountOptions(m.account)}</select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" value="${C.currencyInput(m.value)}" required></label><label>Data da semana trabalhada <small class="field-help">Opcional: use quando o Pix cair depois.</small><input type="date" name="competenceDate" value="${competenceDate}"></label></div><div class="logic-note">Entrada aumenta a conta escolhida. Para entregas, a data opcional organiza o valor na semana em que você trabalhou, sem alterar o dia em que o dinheiro entrou.</div>`;
+    }
     const label = type === 'rendimento' ? 'Conta que rendeu' : 'Conta afetada';
-    const note = type === 'rendimento' ? 'Rendimento aumenta patrimônio, mas fica separado do faturamento.' : type === 'saida' ? 'Saída reduz diretamente a conta escolhida.' : 'Entrada aumenta a conta escolhida e entra como faturamento/receita.';
+    const note = type === 'rendimento' ? 'Rendimento aumenta patrimônio, mas fica separado do faturamento.' : 'Saída reduz diretamente a conta escolhida.';
     return `<div class="form-grid"><label>${label}<select name="account">${accountOptions(m.account)}</select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" value="${C.currencyInput(m.value)}" required></label></div><div class="logic-note">${note}</div>`;
   }
 
   function renderHistorico(){
     const items = combinedHistory();
-    return `<section class="card"><div class="card-title"><div><span class="eyebrow">Registros locais</span><h2>Histórico completo</h2><p>Clique em editar para ajustar qualquer registro.</p></div><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button></div>${items.length?`<div class="list history-list">${items.map(renderHistoryItem).join('')}</div>`:'<div class="empty">Nenhum registro ainda.</div>'}</section>`;
+    return `<section class="card"><div class="card-title"><div><span class="eyebrow">Registros locais</span><h2>Histórico completo</h2><p>Encontre por descrição, categoria, mês ou tipo e edite qualquer registro.</p></div><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button></div>${items.length?`<div class="history-filters"><label>Buscar<input data-history-filter="query" placeholder="Ex.: entrega, salário, mercado"></label><label>Mês<input type="month" data-history-filter="month"></label><label>Tipo<select data-history-filter="type"><option value="">Todos</option><option value="snapshot">Patrimônio</option><option value="entrada">Entradas</option><option value="saida">Saídas</option><option value="transferencia">Transferências</option><option value="rendimento">Rendimentos</option><option value="ifood_dinheiro">iFood dinheiro</option><option value="cartao">Compras no cartão</option><option value="pagamento_cartao">Pagamentos do cartão</option></select></label><span class="history-count" data-history-count>${items.length} registro(s)</span></div><div class="list history-list" data-history-list>${items.map(renderHistoryItem).join('')}</div><div class="empty" data-history-empty hidden>Nenhum registro corresponde aos filtros.</div>`:'<div class="empty">Nenhum registro ainda.</div>'}</section>`;
+  }
+  function applyHistoryFilters(){
+    const list = $('[data-history-list]');
+    if(!list) return;
+    const query = C.normalizeSearchText($('[data-history-filter="query"]')?.value || '');
+    const month = $('[data-history-filter="month"]')?.value || '';
+    const type = $('[data-history-filter="type"]')?.value || '';
+    let visible = 0;
+    $$('[data-history-record]', list).forEach(item => {
+      const matchesQuery = !query || C.normalizeSearchText(item.textContent).includes(query);
+      const matchesMonth = !month || String(item.dataset.historyDate || '').startsWith(month);
+      const matchesType = !type || item.dataset.historyType === type;
+      item.hidden = !(matchesQuery && matchesMonth && matchesType);
+      if(!item.hidden) visible += 1;
+    });
+    const counter = $('[data-history-count]');
+    if(counter) counter.textContent = `${visible} registro(s)`;
+    const empty = $('[data-history-empty]');
+    if(empty) empty.hidden = visible !== 0;
   }
   function combinedHistory(){
     const pats = state.patrimonio.map(p => ({kind:'snapshot', data:p.data, createdAt:p.createdAt, item:C.normalizeSnapshot(p)}));
@@ -353,25 +453,67 @@
     if(entry.kind === 'snapshot'){
       const p = entry.item;
       const sums = C.snapshotAssets(p);
-      return `<article class="list-item"><div class="item-main"><span class="tag neutral">Patrimônio</span><b>${C.formatDateBR(p.data)}</b><small>${escapeHtml(p.observacoes || 'Base diária completa')}</small></div><div class="item-side"><strong>${privateMoney(sums.liquido)}</strong><button class="link-btn" data-action="editSnapshot" data-id="${p.id}">Editar</button></div></article>`;
+      return `<article class="list-item" data-history-record data-history-date="${p.data}" data-history-type="snapshot"><div class="item-main"><span class="tag neutral">Patrimônio</span><b>${C.formatDateBR(p.data)}</b><small>${escapeHtml(p.observacoes || 'Base diária completa')}</small></div><div class="item-side"><strong>${privateMoney(sums.liquido)}</strong><button class="link-btn" data-action="editSnapshot" data-id="${escapeHtml(p.id)}">Editar</button></div></article>`;
     }
     const m = entry.item;
     const impact = C.movementImpact(m);
     const subtitle = m.type === 'transferencia' ? `${accountTitle(m.fromAccount)} → ${accountTitle(m.toAccount)}` : m.type === 'ifood_dinheiro' ? `Recebido ${privateMoney(m.received)} • troco ${privateMoney(m.change)}` : m.type === 'cartao' ? 'Aumenta fatura aberta' : m.type === 'pagamento_cartao' ? `Pago por ${accountTitle(m.account)}` : accountTitle(m.account);
-    return `<article class="list-item"><div class="item-main"><span class="tag ${movementTone(m.type)}">${movementTypeLabel(m.type)}</span><b>${escapeHtml(m.description || C.defaultMovementDescription(m.type))}</b><small>${C.formatDateBR(m.data)} • ${escapeHtml(subtitle)}</small></div><div class="item-side"><strong class="${impact.net<0?'negative':impact.net>0?'positive':''}">${movementAmountText(m)}</strong><button class="link-btn" data-action="editMovement" data-id="${m.id}">Editar</button></div></article>`;
+    const category = m.category ? ` • ${m.category}` : '';
+    const competence = C.isValidDate(m.competenceDate) && m.competenceDate !== m.data ? ` • semana ${C.formatDateBR(m.competenceDate)}` : '';
+    return `<article class="list-item" data-history-record data-history-date="${m.data}" data-history-type="${m.type}"><div class="item-main"><span class="tag ${movementTone(m.type)}">${movementTypeLabel(m.type)}</span><b>${escapeHtml(m.description || C.defaultMovementDescription(m.type))}</b><small>${C.formatDateBR(m.data)} • ${escapeHtml(subtitle + category + competence)}</small></div><div class="item-side"><strong class="${impact.net<0?'negative':impact.net>0?'positive':''}">${movementAmountText(m)}</strong><button class="link-btn" data-action="editMovement" data-id="${escapeHtml(m.id)}">Editar</button></div></article>`;
   }
 
+  function getAllTimeCaixinhaYields(){
+    const totals = {futuro:0, giro:0, manual:0, snapshot:0, total:0};
+    state.patrimonio.map(C.normalizeSnapshot).forEach(p => {
+      totals.futuro = C.round2(totals.futuro + p.rendimentoFuturo);
+      totals.giro = C.round2(totals.giro + p.rendimentoGiro);
+      totals.snapshot = C.round2(totals.snapshot + p.rendimentoFuturo + p.rendimentoGiro);
+    });
+    state.movements.map(C.normalizeMovement).filter(m=>m.type==='rendimento' && ['futuro','giro'].includes(m.account)).forEach(m => {
+      totals[m.account] = C.round2(totals[m.account] + m.value);
+      totals.manual = C.round2(totals.manual + m.value);
+    });
+    totals.total = C.round2(totals.futuro + totals.giro);
+    return totals;
+  }
+  function caixinhaYieldHistory(){
+    const items = state.movements
+      .map(C.normalizeMovement)
+      .filter(m=>m.type==='rendimento' && ['futuro','giro'].includes(m.account))
+      .map(m=>({kind:'movement', item:m, data:m.data, createdAt:m.createdAt}));
+    state.patrimonio.map(C.normalizeSnapshot).forEach(p => {
+      if(p.rendimentoFuturo >= 0.01) items.push({kind:'snapshot-yield', account:'futuro', value:p.rendimentoFuturo, data:p.data, createdAt:p.capturedAt, item:p});
+      if(p.rendimentoGiro >= 0.01) items.push({kind:'snapshot-yield', account:'giro', value:p.rendimentoGiro, data:p.data, createdAt:p.capturedAt, item:p});
+    });
+    return items.sort(C.sortDesc);
+  }
+  function renderYieldHistoryItem(entry){
+    if(entry.kind === 'movement') return renderHistoryItem(entry);
+    return `<article class="list-item"><div class="item-main"><span class="tag good">Automático</span><b>${escapeHtml(accountTitle(entry.account))}</b><small>${C.formatDateBR(entry.data)} • classificado na base diária</small></div><div class="item-side"><strong class="positive">${privateMoney(entry.value)}</strong><button class="link-btn" data-action="editSnapshot" data-id="${escapeHtml(entry.item.id)}">Ver base</button></div></article>`;
+  }
   function renderRendimentos(){
     const balances = C.calculateBalances(state);
-    const month = C.getMonthlySummary(state);
-    const yields = state.movements.filter(m => C.normalizeMovement(m).type === 'rendimento').map(C.normalizeMovement).sort(C.sortDesc);
-    const snapshotYield = state.patrimonio.reduce((sum,p)=> sum + C.normalizeSnapshot(p).rendimentoFuturo + C.normalizeSnapshot(p).rendimentoGiro, 0);
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Rendimentos</span><h2>Caixinhas separadas</h2><p>O app pode sugerir o CDI pela diferença diária das caixinhas; aqui você também pode lançar manualmente se precisar.</p></div></div><div class="mini-stats"><div><span>Futuro agora</span><b>${privateMoney(balances.assets.futuro)}</b></div><div><span>Giro agora</span><b>${privateMoney(balances.assets.giro)}</b></div><div><span>Rendimento mês</span><b>${privateMoney(month.yield)}</b></div><div><span>Rendimento em bases</span><b>${privateMoney(snapshotYield)}</b></div></div><form class="form" data-form="quick-yield"><div class="form-grid"><label>Data<input type="date" name="data" value="${C.todayISO()}"></label><label>Caixinha<select name="account"><option value="futuro">Caixinha Futuro</option><option value="giro">Caixinha Giro</option></select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" placeholder="0,00"></label></div><button class="primary-btn" type="submit">Salvar rendimento</button></form></section><section class="card"><div class="card-title"><div><span class="eyebrow">Histórico</span><h2>Rendimentos lançados</h2></div></div>${yields.length?`<div class="list">${yields.slice(0,12).map(m=>renderHistoryItem({kind:'movement', item:m, data:m.data, createdAt:m.createdAt})).join('')}</div>`:'<div class="empty">Nenhum rendimento manual lançado ainda.</div>'}</section></div>`;
+    const month = C.getYieldSummary(state);
+    const allTime = getAllTimeCaixinhaYields();
+    const history = caixinhaYieldHistory();
+    const monthCaixinhas = C.round2(month.futuro.total + month.giro.total);
+    const monthSnapshot = C.round2(month.futuro.snapshot + month.giro.snapshot);
+    const monthManual = C.round2(month.futuro.manual + month.giro.manual);
+    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Rendimentos</span><h2>Caixinhas separadas</h2><p>O CDI de Futuro e Giro agora é mostrado separadamente, sem entrar no faturamento do trabalho.</p></div></div><div class="mini-stats"><div><span>Futuro agora</span><b>${privateMoney(balances.assets.futuro)}</b></div><div><span>Giro agora</span><b>${privateMoney(balances.assets.giro)}</b></div><div><span>Futuro no mês</span><b>${privateMoney(month.futuro.total)}</b></div><div><span>Giro no mês</span><b>${privateMoney(month.giro.total)}</b></div><div><span>Total no mês</span><b>${privateMoney(monthCaixinhas)}</b></div><div><span>Total registrado</span><b>${privateMoney(allTime.total)}</b></div></div><div class="logic-note"><b>Composição do mês:</b> ${privateMoney(monthSnapshot)} detectado nas bases + ${privateMoney(monthManual)} lançado manualmente.</div><form class="form" data-form="quick-yield"><div class="form-grid"><label>Data<input type="date" name="data" value="${C.todayISO()}"></label><label>Caixinha<select name="account"><option value="futuro">Caixinha Futuro</option><option value="giro">Caixinha Giro</option></select></label><label>Valor<input class="money-field" name="value" inputmode="decimal" placeholder="0,00"></label></div><button class="primary-btn" type="submit">Salvar rendimento</button></form></section><section class="card"><div class="card-title"><div><span class="eyebrow">Histórico</span><h2>Rendimentos registrados</h2><p>Inclui os valores automáticos das bases e os lançamentos manuais.</p></div></div>${history.length?`<div class="list history-list">${history.slice(0,30).map(renderYieldHistoryItem).join('')}</div>`:'<div class="empty">Nenhum rendimento registrado ainda.</div>'}</section></div>`;
   }
 
   function renderPerfil(){
     const lastBackup = state.settings.lastBackupAt ? new Date(state.settings.lastBackupAt).toLocaleString('pt-BR') : 'Nunca';
-    return `<div class="grid two"><section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Nuvem:</b> adiada para v13.10. O app não tenta login, não usa chave inválida e não bloqueia o uso local.</div></section><section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div></section>${state.settings.devMode ? '<section class="card"><div class="card-title"><div><span class="eyebrow">Ferramenta dev</span><h2>Cache e atualização</h2><p>Ferramenta temporária para desenvolvimento local. Não aparece no modo usuário.</p></div><span class="pill">v13.05</span></div><div class="quick-row stack"><button class="ghost-btn" data-action="refreshApp">Atualizar app e limpar cache</button></div><div class="logic-note"><b>Produto final:</b> em versão pública/nuvem, isso fica oculto por ambiente/admin.</div></section>' : ''}<section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section></div>`;
+    const autoBackups = getAutoBackups();
+    const latestAuto = autoBackups[0];
+    const latestAutoText = latestAuto && C.timestampMs(latestAuto.savedAt) ? new Date(latestAuto.savedAt).toLocaleString('pt-BR') : 'Nenhum ponto criado ainda';
+    return `<div class="grid two">
+      <section class="card"><div class="card-title"><div><span class="eyebrow">Perfil</span><h2>Modo local estável</h2><p>Na linha v13 local, login e nuvem ficam bloqueados para proteger a base local.</p></div><span class="pill good">Local</span></div><form class="form" data-form="settings"><div class="form-grid"><label>Seu nome no app<input name="ownerName" value="${escapeHtml(state.settings.ownerName || '')}" placeholder="Renan"></label><label>Cartão fecha dia<input type="number" min="1" max="28" name="cardCloseDay" value="${state.settings.cardCloseDay}"></label><label>Cartão vence dia<input type="number" min="1" max="28" name="cardDueDay" value="${state.settings.cardDueDay}"></label></div><button class="primary-btn" type="submit">Salvar configurações</button></form><div class="logic-note"><b>Modo do aplicativo:</b> use o modo Usuário no dia a dia; o modo Desenvolvedor apenas revela diagnóstico e limpeza de cache.</div><div class="quick-row"><button class="${state.settings.devMode?'ghost-btn':'primary-btn'}" data-action="setUserMode">Usuário</button><button class="${state.settings.devMode?'primary-btn':'ghost-btn'}" data-action="setDevMode">Desenvolvedor</button></div></section>
+      <section class="card"><div class="card-title"><div><span class="eyebrow">Segurança</span><h2>Backup e restauração</h2><p>Último backup baixado: ${escapeHtml(lastBackup)}</p></div></div><div class="quick-row stack"><button class="primary-btn" data-action="exportBackup">Baixar backup JSON</button><button class="ghost-btn" data-action="exportCSV">Exportar CSV</button><label class="file-btn">Importar backup JSON<input type="file" accept="application/json,.json" data-action="importBackupFile"></label><button class="danger-btn" data-action="resetApp">Zerar app local</button></div><div class="logic-note good"><b>Recuperação automática:</b> o app guarda até ${AUTO_BACKUP_LIMIT} pontos antes de alterações importantes.<br><small>Último ponto: ${escapeHtml(latestAutoText)}</small><div class="quick-row"><button class="ghost-btn compact" data-action="restoreLatestBackup" ${latestAuto?'':'disabled'}>Desfazer última alteração</button></div></div></section>
+      ${state.settings.devMode ? '<section class="card"><div class="card-title"><div><span class="eyebrow">Ferramenta dev</span><h2>Cache e atualização</h2><p>Ferramenta temporária para desenvolvimento local. Não aparece no modo usuário.</p></div><span class="pill">v13.07</span></div><div class="quick-row stack"><button class="ghost-btn" data-action="refreshApp">Atualizar app e limpar cache</button></div><div class="logic-note"><b>Produto final:</b> em versão pública/nuvem, isso fica oculto por ambiente/admin.</div></section>' : ''}
+      <section class="card full"><div class="card-title"><div><span class="eyebrow">Objetivo principal</span><h2>Meta e prazo</h2></div></div><form class="form" data-form="goal"><div class="form-grid"><label>Nome<input name="name" value="${escapeHtml(state.settings.goal.name)}"></label><label>Valor da meta<input class="money-field" name="target" inputmode="decimal" value="${C.currencyInput(state.settings.goal.target)}"></label><label>Data final<input type="date" name="due" value="${state.settings.goal.due}"></label></div><button class="primary-btn" type="submit">Salvar objetivo</button></form></section>
+    </div>`;
   }
 
   function openModal(html){
@@ -391,14 +533,48 @@
     openModal(`<div class="card-title"><div><h2>Editar prazo da meta</h2><p>Ao mudar a data, o ritmo mensal necessário recalcula automaticamente.</p></div></div><form class="form" data-form="goal-due"><label>Data final<input type="date" name="due" value="${state.settings.goal.due}" autofocus></label><button class="primary-btn" type="submit">Salvar</button></form>`);
   }
   function quickPatrimonio(){ openModal(`<div class="card-title"><div><h2>Registrar patrimônio completo</h2><p>Essa base substitui os saldos estimados pelo saldo real do dia.</p></div></div>${patrimonioForm()}`); }
+  function quickDelivery(){
+    openModal(`<div class="card-title"><div><h2>Registrar entrega</h2><p>O valor entra no Giro e fica associado à semana trabalhada.</p></div></div>${movementForm(null, {type:'entrada', data:C.todayISO(), competenceDate:C.todayISO(), description:'Entregas', category:'Entrega', account:'giro'})}`);
+  }
+  function applyMovementPreset(form, presetName){
+    if(!form) return;
+    const presets = {
+      entrega:{type:'entrada', description:'Entregas', category:'Entrega', account:'giro', competenceDate:C.todayISO()},
+      ifood_cash:{type:'ifood_dinheiro', description:'iFood em dinheiro', category:'Entrega', account:'carteira', competenceDate:''},
+      salario:{type:'entrada', description:'Salário', category:'Salário', account:'banco', competenceDate:''},
+      barman:{type:'entrada', description:'Barman', category:'Barman', account:'giro', competenceDate:''},
+      extra:{type:'entrada', description:'Renda extra', category:'Extra', account:'banco', competenceDate:''}
+    };
+    const preset = presets[presetName];
+    if(!preset) return;
+    form.elements.type.value = preset.type;
+    form.elements.description.value = preset.description;
+    form.elements.category.value = preset.category;
+    const current = {
+      type:preset.type,
+      account:preset.account,
+      fromAccount:fieldValue(form,'fromAccount') || 'giro',
+      toAccount:fieldValue(form,'toAccount') || 'carteira',
+      value:moneyValue(form,'value'),
+      received:moneyValue(form,'received'),
+      change:moneyValue(form,'change'),
+      competenceDate:preset.competenceDate
+    };
+    $('.movement-dynamic', form).innerHTML = movementDynamicFields(current);
+    const amount = form.elements.value || form.elements.received;
+    if(amount) setTimeout(()=>amount.focus(), 0);
+  }
   function editSnapshot(id){ const item = state.patrimonio.find(p=>p.id===id); if(item) openModal(`<div class="card-title"><div><h2>Editar patrimônio</h2><p>Ajuste a base real salva.</p></div></div>${patrimonioForm(item)}`); }
   function editMovement(id){ const item = state.movements.find(m=>m.id===id); if(item) openModal(`<div class="card-title"><div><h2>Editar lançamento</h2><p>Ajuste o movimento salvo.</p></div></div>${movementForm(item)}`); }
 
   function savePatrimonioForm(form){
+    const existing = form.dataset.id ? state.patrimonio.find(p=>p.id===form.dataset.id) : null;
+    const captureNow = C.nowISO();
     const item = C.normalizeSnapshot({
       id: form.dataset.id || C.id('pat'),
-      createdAt: form.dataset.id ? (state.patrimonio.find(p=>p.id===form.dataset.id)?.createdAt || C.nowISO()) : C.nowISO(),
-      updatedAt: C.nowISO(),
+      createdAt: existing?.createdAt || captureNow,
+      updatedAt: captureNow,
+      capturedAt: existing ? C.snapshotCapturedAt(existing) : captureNow,
       data: fieldValue(form,'data'),
       futuro: moneyValue(form,'futuro'), giro: moneyValue(form,'giro'), carteira: moneyValue(form,'carteira'), banco: moneyValue(form,'banco'), investimentos: moneyValue(form,'investimentos'),
       faturaAberta: moneyValue(form,'faturaAberta'), outrasDividas: moneyValue(form,'outrasDividas'), rendimentoFuturo: moneyValue(form,'rendimentoFuturo'), rendimentoGiro: moneyValue(form,'rendimentoGiro'),
@@ -433,6 +609,7 @@
       data: fieldValue(form,'data'),
       description: fieldValue(form,'description') || C.defaultMovementDescription(type),
       category: fieldValue(form,'category'),
+      competenceDate: fieldValue(form,'competenceDate'),
       account: fieldValue(form,'account'),
       fromAccount: fieldValue(form,'fromAccount'),
       toAccount: fieldValue(form,'toAccount'),
@@ -450,9 +627,12 @@
     const idx = state.movements.findIndex(m=>m.id===item.id);
     if(idx >= 0) state.movements[idx] = item; else state.movements.push(item);
     state.movements.sort(C.sortByDateThenCreated);
-    saveState(); closeModal(); render(); notify('Lançamento salvo e saldos recalculados.', 'success');
+    const positive = ['entrada','rendimento','ifood_dinheiro'].includes(type);
+    const message = positive ? 'Entrada registrada e saldos atualizados.' : type === 'transferencia' || type === 'pagamento_cartao' ? 'Movimentação registrada sem alterar o faturamento.' : 'Saída registrada e saldos atualizados.';
+    saveState(); giveFeedback(type); closeModal(); render(); notify(message, positive ? 'success' : 'info');
   }
   function saveSettings(form){
+    backupBefore('salvar-configuracoes');
     state.settings.ownerName = fieldValue(form,'ownerName').trim();
     state.settings.cardCloseDay = C.clamp(parseInt(fieldValue(form,'cardCloseDay'),10)||4,1,28);
     state.settings.cardDueDay = C.clamp(parseInt(fieldValue(form,'cardDueDay'),10)||11,1,28);
@@ -471,13 +651,20 @@
     });
     if(goal.target <= 0) return notify('O valor do objetivo precisa ser maior que zero.', 'warn');
     if(!C.isValidDate(goal.due)) return notify('Informe uma data final válida.', 'warn');
+    backupBefore('salvar-objetivo');
     state.settings.goal = goal; saveState(); closeModal(); render(); notify('Objetivo atualizado. Cálculos recalculados.', 'success');
   }
   function saveQuickYield(form){
     const item = C.normalizeMovement({type:'rendimento', data: fieldValue(form,'data'), account: fieldValue(form,'account'), value: moneyValue(form,'value'), description: `Rendimento ${accountTitle(fieldValue(form,'account'))}`});
     if(item.value <= 0) return notify('Informe o rendimento.', 'warn');
     backupBefore('salvar-rendimento');
-    state.movements.push(item); state.movements.sort(C.sortByDateThenCreated); saveState(); render(); notify('Rendimento salvo separado do faturamento.', 'success');
+    state.movements.push(item); state.movements.sort(C.sortByDateThenCreated); saveState(); giveFeedback('rendimento'); render(); notify('Rendimento salvo separado do faturamento.', 'success');
+  }
+  function giveFeedback(type){
+    try{
+      if(!navigator.vibrate) return;
+      navigator.vibrate(['entrada','rendimento','ifood_dinheiro'].includes(type) ? 45 : [20,35,20]);
+    }catch(_){ }
   }
   function applyLatestYieldSuggestion(){
     const details = C.snapshotDeltaDetails(state);
@@ -511,20 +698,20 @@
   }
   function exportCSV(){
     const rows = [[
-      'registro','data','tipo','descricao','categoria','conta','conta_origem','conta_destino',
+      'registro','data','data_referencia_semana','tipo','descricao','categoria','conta','conta_origem','conta_destino',
       'valor','recebido','troco','futuro','giro','carteira','banco','investimentos',
       'fatura_aberta','outras_dividas','rendimento_futuro','rendimento_giro','patrimonio_bruto','patrimonio_liquido','observacao'
     ]];
     state.patrimonio.map(C.normalizeSnapshot).forEach(p=>{
       const sums = C.snapshotAssets(p);
       rows.push([
-        'patrimonio', p.data, 'Patrimônio completo', 'Base real diária', '', '', '', '',
+        'patrimonio', p.data, '', 'Patrimônio completo', 'Base real diária', '', '', '', '',
         '', '', '', p.futuro, p.giro, p.carteira, p.banco, p.investimentos,
         p.faturaAberta, p.outrasDividas, p.rendimentoFuturo, p.rendimentoGiro, sums.bruto, sums.liquido, p.observacoes
       ]);
     });
     state.movements.map(C.normalizeMovement).forEach(m=>rows.push([
-      'movimento', m.data, movementTypeLabel(m.type), m.description, m.category, m.account || '', m.fromAccount || '', m.toAccount || '',
+      'movimento', m.data, m.competenceDate || '', movementTypeLabel(m.type), m.description, m.category, m.account || '', m.fromAccount || '', m.toAccount || '',
       m.value, m.received, m.change, '', '', '', '', '', '', '', '', '', '', '', m.notes
     ]));
     const csv = '\ufeff' + rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g,'""')}"`).join(';')).join('\n');
@@ -539,12 +726,33 @@
   async function importBackupFile(file){
     if(!file) return;
     try{
+      if(file.size > 10 * 1024 * 1024) return notify('Esse backup é maior que 10 MB e não será importado.', 'warn');
       const text = await file.text();
       const parsed = JSON.parse(text);
+      const source = parsed && parsed.data && parsed.data.settings ? parsed.data : parsed;
+      const recognized = source && typeof source === 'object' && source.settings && (Array.isArray(source.patrimonio) || Array.isArray(source.movements) || Array.isArray(source.lancamentos));
+      if(!recognized) return notify('Esse JSON não parece ser um backup do Financeiro CRM.', 'warn');
+      const imported = C.migrateState(source);
+      const validation = C.validateState(imported);
+      if(!validation.ok) return notify(`Backup recusado: ${validation.problems[0] || 'há dados inválidos.'}`, 'warn');
+      const confirmation = `Importar ${imported.patrimonio.length} patrimônio(s) e ${imported.movements.length} lançamento(s)? Os dados atuais serão substituídos, mas ficarão disponíveis na recuperação automática.`;
+      if(!confirm(confirmation)) return notify('Importação cancelada.', 'info');
       backupBefore('antes-importar');
-      state = C.migrateState(parsed.data || parsed);
+      state = imported;
       saveState(); currentView='dashboard'; render(); notify('Backup importado com sucesso.', 'success');
     }catch(err){ console.error(err); notify('Não consegui importar esse JSON.', 'warn'); }
+  }
+  function restoreLatestBackup(){
+    const latest = getAutoBackups()[0];
+    if(!latest) return notify('Ainda não existe um ponto de recuperação.', 'warn');
+    const when = C.timestampMs(latest.savedAt) ? new Date(latest.savedAt).toLocaleString('pt-BR') : 'o último ponto';
+    if(!confirm(`Desfazer a última alteração e restaurar os dados de ${when}?`)) return;
+    const restored = C.migrateState(latest.data);
+    const validation = C.validateState(restored);
+    if(!validation.ok) return notify('O ponto de recuperação está inconsistente e não foi restaurado.', 'warn');
+    backupBefore('antes-restaurar');
+    state = restored;
+    saveState(); currentView='dashboard'; render(); notify('Última alteração desfeita com segurança.', 'success');
   }
   function resetApp(){
     if(!confirm('Zerar todos os dados locais?')) return;
@@ -561,7 +769,11 @@
     if(action === 'toggleMenu') document.body.classList.toggle('menu-open');
     if(action === 'toggleBalances'){ state.settings.hideBalances = !state.settings.hideBalances; saveState(); render(); }
     if(action === 'toggleDev'){ state.settings.devMode = !state.settings.devMode; saveState(); render(); notify(state.settings.devMode?'Modo desenvolvedor ativo.':'Modo usuário ativo.'); }
+    if(action === 'setUserMode'){ state.settings.devMode = false; saveState(); render(); notify('Modo usuário ativo.'); }
+    if(action === 'setDevMode'){ state.settings.devMode = true; saveState(); render(); notify('Modo desenvolvedor ativo.'); }
     if(action === 'quickPatrimonio') quickPatrimonio();
+    if(action === 'quickDelivery') quickDelivery();
+    if(action === 'applyMovementPreset') applyMovementPreset(btn.closest('form'), btn.dataset.preset);
     if(action === 'editGoalTarget') editGoalTarget();
     if(action === 'editGoalDue') editGoalDue();
     if(action === 'closeModal') closeModal();
@@ -572,6 +784,7 @@
     if(action === 'exportBackup') exportBackup();
     if(action === 'exportCSV') exportCSV();
     if(action === 'resetApp') resetApp();
+    if(action === 'restoreLatestBackup') restoreLatestBackup();
     if(action === 'refreshApp') refreshAppCache();
     if(action === 'applyYieldSuggestion') applyYieldSuggestionToForm(btn.closest('form'));
     if(action === 'applyLatestYieldSuggestion') applyLatestYieldSuggestion();
@@ -592,6 +805,7 @@
     setTimeout(()=>{ try{ input.select(); }catch(_){ } }, 0);
   });
   document.addEventListener('input', (ev)=>{
+    if(ev.target.closest('[data-history-filter]')){ applyHistoryFilters(); return; }
     const input = ev.target.closest('input.money-field');
     if(!input) return;
     applyMoneyMask(input);
@@ -616,6 +830,7 @@
     if(kind === 'quick-yield') saveQuickYield(form);
   });
   document.addEventListener('change', (ev)=>{
+    if(ev.target.closest('[data-history-filter]')){ applyHistoryFilters(); return; }
     const typeSelect = ev.target.closest('[data-role="movement-type"]');
     if(typeSelect){
       const form = typeSelect.closest('form');
@@ -627,7 +842,8 @@
         toAccount: fieldValue(form,'toAccount') || 'carteira',
         value: moneyValue(form,'value'),
         received: moneyValue(form,'received'),
-        change: moneyValue(form,'change')
+        change: moneyValue(form,'change'),
+        competenceDate: fieldValue(form,'competenceDate')
       };
       dynamic.innerHTML = movementDynamicFields(old);
     }
@@ -643,7 +859,7 @@
     setRuntimeIcon();
     render();
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('./service-worker.js?v=1305').then(reg => {
+      navigator.serviceWorker.register('./service-worker.js?v=1307').then(reg => {
         if(reg && reg.update) reg.update().catch(()=>{});
       }).catch(()=>{});
     }

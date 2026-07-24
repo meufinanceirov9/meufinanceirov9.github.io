@@ -1,19 +1,20 @@
-# Testes v13.05
+# Testes v13.07
 
 Executados:
 
-- `node --check core.js`
-- `node --check app.js`
-- `node tests/core.test.js`
-- Validação de parser monetário brasileiro.
-- Validação da máscara de centavos subindo casas.
-- Validação de patrimônio bruto/líquido.
-- Validação de compra no cartão e pagamento do cartão.
-- Validação de iFood dinheiro com troco.
-- Validação de transferência inválida.
-- Validação de migração de backup v13.
-- Validação de rendimento informado em base de patrimônio.
-- Validação da auditoria entre bases.
-- Validação nova v13.05: rendimento estimado por diferença diária descontando lançamento de entrada no Giro.
-- Validação nova v13.05: sem base anterior, o app não estima rendimento.
-- Manifest, ícones e service worker atualizados para v13.05.
+- Verificação de sintaxe de `core.js`, `app.js` e `service-worker.js`.
+- Testes automatizados do núcleo financeiro.
+- Validação dos arquivos referenciados pelo manifest e pelo cache PWA.
+- Migração de estado e backups da linha v13.
+- Patrimônio, rendimentos, cartão, pagamento, transferência e iFood em dinheiro.
+- Atualização de base no mesmo dia sem soma dupla.
+- Semana de segunda a domingo.
+- Repasse recebido na quarta associado à semana trabalhada anterior.
+- Separação entre Pix de entrega e dinheiro líquido com troco.
+- Exclusão de Salário, Barman e outras categorias do total de entregas.
+- Atalho Registrar entrega e presets de lançamento.
+- Barra inferior móvel com quatro abas.
+- Busca e filtro do Histórico.
+- Fluxo completo de interface, persistência e recuperação automática.
+
+Resultado: todos os testes da v13.07 passaram.

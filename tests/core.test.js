@@ -98,7 +98,7 @@ assert.strictEqual(C.validateState(invalidTransfer).ok, false, 'transferência c
 
 const backupV13 = {data:{settings:{goal:{target:100000,due:'2027-12-31'}}, patrimonio:[{data:'2026-07-08',futuro:'14.362,91',giro:'529,47',carteira:'4,00',faturaAberta:'901,36'}], movements:[]}};
 const migratedBackup = C.migrateState(backupV13);
-assert.strictEqual(migratedBackup.settings.appVersion, 'v13.05');
+assert.strictEqual(migratedBackup.settings.appVersion, 'v13.07');
 assert.strictEqual(migratedBackup.settings.goal.due, '2027-12-31');
 approx(C.calculateBalances(migratedBackup,{asOfDate:'2026-07-09'}).liquido, 13995.02, 'backup v13 antigo deve migrar preservando liquido');
 
@@ -130,5 +130,79 @@ assert.strictEqual(estimatedWithIncome.movements.length, 1, 'estimativa deve con
 const estimatedNoPrevious = C.estimateSnapshotYields(C.defaultState(), draftWithIncome);
 assert.strictEqual(estimatedNoPrevious.ok, false, 'sem base anterior não deve estimar rendimento');
 
-console.log('Todos os testes do core v13.05 passaram.');
+// Atualizar a base do mesmo dia precisa avançar o corte e impedir soma dupla.
+const sameDayCaptureState = C.defaultState();
+sameDayCaptureState.patrimonio.push(C.normalizeSnapshot({
+  id:'capture1', data:'2026-07-21', createdAt:'2026-07-21T08:00:00.000Z',
+  updatedAt:'2026-07-21T10:00:00.000Z', capturedAt:'2026-07-21T10:00:00.000Z', futuro:100
+}));
+sameDayCaptureState.movements.push(C.normalizeMovement({
+  id:'before_capture', type:'entrada', data:'2026-07-21', createdAt:'2026-07-21T09:00:00.000Z', account:'futuro', value:20
+}));
+sameDayCaptureState.movements.push(C.normalizeMovement({
+  id:'after_capture', type:'entrada', data:'2026-07-21', createdAt:'2026-07-21T11:00:00.000Z', account:'futuro', value:5
+}));
+const sameDayBalances = C.calculateBalances(sameDayCaptureState, {asOfDate:'2026-07-21'});
+approx(sameDayBalances.assets.futuro, 105, 'movimento já absorvido pela base atualizada não pode ser somado de novo');
+assert.deepStrictEqual(sameDayBalances.applied.map(m=>m.id), ['after_capture']);
 
+// Backups antigos com mais de uma base no mesmo dia conservam somente a conferência mais recente.
+const duplicateDay = C.migrateState({settings:{goal:{target:100000,due:'2028-12-31'}}, patrimonio:[
+  {id:'dup_old',data:'2026-07-20',createdAt:'2026-07-20T08:00:00.000Z',capturedAt:'2026-07-20T08:00:00.000Z',futuro:100},
+  {id:'dup_new',data:'2026-07-20',createdAt:'2026-07-20T08:00:00.000Z',capturedAt:'2026-07-20T20:00:00.000Z',futuro:130}
+], movements:[]});
+assert.strictEqual(duplicateDay.patrimonio.length, 1, 'deve existir apenas uma base por dia');
+assert.strictEqual(duplicateDay.patrimonio[0].id, 'dup_new', 'deve conservar a captura mais recente do dia');
+approx(duplicateDay.patrimonio[0].futuro, 130);
+
+// Lançamento retroativo de um dia intermediário deve explicar a diferença mesmo se foi digitado depois.
+const retroactiveState = C.defaultState();
+retroactiveState.patrimonio.push(C.normalizeSnapshot({id:'retro_prev',data:'2026-07-18',createdAt:'2026-07-18T20:00:00.000Z',capturedAt:'2026-07-18T20:00:00.000Z',futuro:100}));
+retroactiveState.patrimonio.push(C.normalizeSnapshot({id:'retro_curr',data:'2026-07-20',createdAt:'2026-07-20T20:00:00.000Z',capturedAt:'2026-07-20T20:00:00.000Z',futuro:120}));
+retroactiveState.movements.push(C.normalizeMovement({id:'retro_mov',type:'entrada',data:'2026-07-19',createdAt:'2026-07-21T09:00:00.000Z',account:'futuro',value:20}));
+const retroDetails = C.snapshotDeltaDetails(retroactiveState);
+approx(retroDetails.explained, 20, 'entrada retroativa deve explicar a variação entre bases');
+approx(retroDetails.suggestedYield.total, 0, 'entrada retroativa não pode virar CDI');
+
+// Rendimentos precisam ficar separados por caixinha e por origem automática/manual.
+const splitYieldState = C.defaultState();
+splitYieldState.patrimonio.push(C.normalizeSnapshot({data:'2026-07-20',rendimentoFuturo:7.54,rendimentoGiro:0.26}));
+splitYieldState.movements.push(C.normalizeMovement({type:'rendimento',data:'2026-07-21',account:'futuro',value:1.50}));
+splitYieldState.movements.push(C.normalizeMovement({type:'rendimento',data:'2026-07-21',account:'giro',value:0.50}));
+const splitYield = C.getYieldSummary(splitYieldState, '2026-07-21');
+approx(splitYield.futuro.total, 9.04, 'Futuro separado');
+approx(splitYield.giro.total, 0.76, 'Giro separado');
+approx(splitYield.manual, 2.00, 'rendimento manual separado');
+approx(splitYield.snapshot, 7.80, 'rendimento automático separado');
+approx(splitYield.total, 9.80, 'total de rendimentos do mês');
+
+// Semana de entregas fecha de segunda a domingo e pode usar data de competência diferente do Pix.
+assert.strictEqual(C.startOfWeekISO('2026-07-20'), '2026-07-20', 'segunda inicia a própria semana');
+assert.strictEqual(C.startOfWeekISO('2026-07-26'), '2026-07-20', 'domingo pertence à semana iniciada na segunda');
+assert.strictEqual(C.endOfWeekISO('2026-07-24'), '2026-07-26', 'semana termina no domingo');
+const deliveryState = C.defaultState();
+deliveryState.movements.push(C.normalizeMovement({id:'delivery_previous',type:'entrada',data:'2026-07-22',competenceDate:'2026-07-19',category:'Entrega',account:'giro',value:300}));
+deliveryState.movements.push(C.normalizeMovement({id:'delivery_current',type:'entrada',data:'2026-07-22',competenceDate:'2026-07-21',category:'Entrega',account:'giro',value:70}));
+deliveryState.movements.push(C.normalizeMovement({id:'delivery_cash',type:'ifood_dinheiro',data:'2026-07-24',received:50,change:17.28}));
+deliveryState.movements.push(C.normalizeMovement({id:'delivery_description',type:'entrada',data:'2026-07-24',competenceDate:'2026-07-20',description:'Repasse iFood',account:'giro',value:100}));
+deliveryState.movements.push(C.normalizeMovement({id:'not_delivery',type:'entrada',data:'2026-07-24',category:'Barman',account:'giro',value:200}));
+const currentDeliveryWeek = C.getDeliveryWeeklySummary(deliveryState, '2026-07-24');
+approx(currentDeliveryWeek.total, 202.72, 'semana soma Pix de entregas e dinheiro líquido');
+approx(currentDeliveryWeek.deposited, 170, 'Pix/depósito separado');
+approx(currentDeliveryWeek.cash, 32.72, 'dinheiro considera recebido menos troco');
+approx(currentDeliveryWeek.cashReceived, 50, 'valor bruto em espécie preservado');
+approx(currentDeliveryWeek.change, 17.28, 'troco separado');
+approx(currentDeliveryWeek.averagePerDay, 67.57, 'média pelos dias com registro');
+assert.strictEqual(currentDeliveryWeek.days, 3);
+assert.strictEqual(currentDeliveryWeek.count, 3);
+assert.strictEqual(currentDeliveryWeek.payoutDate, '2026-07-29');
+const previousDeliveryWeek = C.getDeliveryWeeklySummary(deliveryState, '2026-07-19');
+approx(previousDeliveryWeek.total, 300, 'repasse de quarta deve voltar para a semana trabalhada anterior');
+assert.strictEqual(C.movementReferenceDate(deliveryState.movements[0]), '2026-07-19');
+assert.strictEqual(
+  C.normalizeMovement({type:'entrada', data:'2026-07-22', dataReferencia:'2026-07-19'}).competenceDate,
+  '2026-07-19',
+  'backup antigo em português deve preservar a data da semana trabalhada'
+);
+
+console.log('Todos os testes do core v13.07 passaram.');
